@@ -1,0 +1,11 @@
+model={
+	lods={
+		{"saildrone usv.edm",4000.0};
+	};
+         collision_shell="saildrone usv_collision.edm";
+
+}
+
+
+
+
