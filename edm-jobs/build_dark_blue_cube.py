@@ -29,7 +29,15 @@ if mat is None:
 mat.name = "TPG_Dark_Blue_EDM"
 mat.diffuse_color = (0.02, 0.06, 0.20, 1.0)
 
-# Set ED Default Material's color value directly. No external texture is needed.
+# Eagle Dynamics ships the reference material as the legacy "Green RW"
+# node specifically so the add-on can migrate it to the current native EDM
+# shader node. Run ED's own migration operator before setting export values.
+update_result = bpy.ops.edm.import_matrials()
+if update_result != {"FINISHED"}:
+    raise RuntimeError(f"ED Update EDM Materials returned {update_result!r}")
+
+# Set the converted ED Default Material's color value directly.
+# No external texture is needed.
 edm_node = None
 for node in mat.node_tree.nodes:
     if getattr(node, "bl_idname", "") == "EdmDefaultShaderNodeType":
