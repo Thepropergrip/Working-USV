@@ -1,0 +1,6 @@
+{
+  "mode": "script",
+  "script": "edm-jobs/build_dark_blue_cube.py",
+  "output": "TPG_1m_Dark_Blue_Cube.edm",
+  "save_blend": true
+}
