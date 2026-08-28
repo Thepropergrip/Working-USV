@@ -56,6 +56,17 @@ jobs:
           New-Item -ItemType Directory -Force -Path $addons | Out-Null
           Copy-Item -Recurse -Force (Join-Path $src "io_scene_edm") (Join-Path $addons "io_scene_edm")
 
+          # The official v261289 addon ships the package directory as "Materials"
+          # while importing it as lower-case "materials". Normal interactive Windows
+          # installs tolerate this, but Blender's headless import path on the hosted
+          # runner does not. Keep ED's original tree untouched and add a case-normalized
+          # duplicate in the temporary installation.
+          $materialsUpper = Join-Path $addons "io_scene_edm\Materials"
+          $materialsLower = Join-Path $addons "io_scene_edm\materials"
+          if ((Test-Path $materialsUpper) -and -not (Test-Path $materialsLower)) {
+            Copy-Item -Recurse -Force $materialsUpper $materialsLower
+          }
+
           $native = Join-Path $addons "io_scene_edm\pyedm_311.pyd"
           if (-not (Test-Path $native)) { throw "Official native pyedm_311.pyd was not installed." }
 
