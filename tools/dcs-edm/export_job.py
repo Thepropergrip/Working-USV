@@ -56,6 +56,23 @@ def enable_official_exporter():
     import addon_utils
     import bpy
 
+    # ED's official addon uses several top-level imports (for example
+    # "from materials...") from inside its own package. Blender's interactive
+    # addon loader normally provides that package path. Headless execution can
+    # omit it, so add the exact official addon root explicitly without
+    # modifying any ED exporter files.
+    addon_root = (
+        Path(os.environ["BLENDER_USER_SCRIPTS"]).resolve()
+        / "addons"
+        / "io_scene_edm"
+    )
+    if not addon_root.exists():
+        raise RuntimeError(f"Official ED addon root not found: {addon_root}")
+    addon_root_str = str(addon_root)
+    if addon_root_str not in sys.path:
+        sys.path.insert(0, addon_root_str)
+    print(f"[EDM] Python addon root: {addon_root}")
+
     addon_utils.enable("io_scene_edm", default_set=False, persistent=False)
     if "io_scene_edm" not in sys.modules:
         raise RuntimeError("io_scene_edm did not load.")
