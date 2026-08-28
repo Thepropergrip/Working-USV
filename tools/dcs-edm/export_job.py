@@ -172,13 +172,29 @@ def main() -> int:
         bpy.ops.wm.save_as_mainfile(filepath=str(blend_out))
         print(f"[EDM] Saved build blend: {blend_out}")
 
-    reporter = Reporter()
-    result = edm.run_edm_export(str(edm_path), bpy.context, reporter, False)
+    # Headless export path: call Eagle Dynamics' actual model writer directly.
+    # io_scene_edm.run_edm_export() calls this same function first, then accesses
+    # GUI addon preferences only to decide whether to launch ModelViewer2.
+    # That optional GUI preference lookup is unavailable in a transient headless
+    # addon session and occurs AFTER a successful EDM save.
+    from io_scene_edm import collection_walker
+    from logger import log
 
-    if result != {"FINISHED"}:
-        raise RuntimeError(f"EDM exporter returned {result!r}.")
+    reporter = Reporter()
+    log.errors = []
+    log.warnings = []
+
+    collection_walker._write(bpy.context, str(edm_path))
+
+    if log.errors:
+        raise RuntimeError(
+            "EDM export errors: " + " | ".join(str(e) for e in log.errors)
+        )
+
+    reporter.report({"INFO"}, f"Model successfully exported to {edm_path}.")
+
     if not edm_path.exists():
-        raise RuntimeError("EDM exporter reported success but no file exists.")
+        raise RuntimeError("EDM exporter completed but no file exists.")
     if edm_path.stat().st_size <= 0:
         raise RuntimeError("EDM exporter produced an empty file.")
 
