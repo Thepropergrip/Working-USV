@@ -62,9 +62,14 @@ jobs:
           # runner does not. Keep ED's original tree untouched and add a case-normalized
           # duplicate in the temporary installation.
           $materialsUpper = Join-Path $addons "io_scene_edm\Materials"
+          $materialsTemp  = Join-Path $addons "io_scene_edm\__materials_casefix"
           $materialsLower = Join-Path $addons "io_scene_edm\materials"
-          if ((Test-Path $materialsUpper) -and -not (Test-Path $materialsLower)) {
-            Copy-Item -Recurse -Force $materialsUpper $materialsLower
+          if (Test-Path $materialsUpper) {
+            Rename-Item -Path $materialsUpper -NewName "__materials_casefix"
+            Rename-Item -Path $materialsTemp -NewName "materials"
+          }
+          if (-not (Test-Path (Join-Path $materialsLower "__init__.py"))) {
+            throw "Failed to normalize ED Materials package casing."
           }
 
           $native = Join-Path $addons "io_scene_edm\pyedm_311.pyd"
