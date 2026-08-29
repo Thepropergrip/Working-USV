@@ -7,6 +7,24 @@ archive = workspace / 'edm-jobs' / 'grizzly_rc4_scripts.tgz'
 root = Path(tempfile.mkdtemp(prefix='grizzly_rc4_'))
 with tarfile.open(archive, mode='r:gz') as tf:
     tf.extractall(root)
+
+# The original GRIZZLY source writes UV loops while Blender is in Edit Mode.
+# Blender 4.1.1 headless exposes a zero-length UV loop collection in that state.
+# Patch only the build copy: assign the exact same UVs in Object Mode instead.
+model_path = root / '02_model.py'
+model = model_path.read_text(encoding='utf-8')
+old_uv = '''    bpy.ops.object.modifier_apply(modifier=solid.name); bpy.ops.object.modifier_apply(modifier=bevel.name)
+    bpy.ops.object.mode_set(mode="EDIT"); bpy.ops.mesh.select_all(action="SELECT")
+    grizzly_release_uv(obj)
+    bpy.ops.object.mode_set(mode="OBJECT")
+'''
+new_uv = '''    bpy.ops.object.modifier_apply(modifier=solid.name); bpy.ops.object.modifier_apply(modifier=bevel.name)
+    grizzly_release_uv(obj)
+'''
+if old_uv not in model:
+    raise RuntimeError('Expected original GRIZZLY UV block not found')
+model_path.write_text(model.replace(old_uv, new_uv), encoding='utf-8')
+
 sys.path.insert(0, str(root))
 for stage in ('01_scene_setup.py','02_model.py','03_materials.py','04_connectors_and_animation.py'):
     print(f'[GRIZZLY RC4] running {stage}')
