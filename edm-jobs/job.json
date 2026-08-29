@@ -1,6 +1,6 @@
 {
   "mode": "script",
-  "script": "edm-jobs/build_static_dark_blue_cube.py",
-  "output": "TPG_1m_Dark_Blue_Cube_Static.edm",
+  "script": "edm-jobs/build_grizzly_rc4.py",
+  "output": "TPG_GRIZZLY_HELLFIRE.edm",
   "save_blend": true
 }
