@@ -1,42 +1,42 @@
 $ErrorActionPreference = "Stop"
 $root = Join-Path $env:GITHUB_WORKSPACE "edm-artifacts"
-$pkg = Join-Path $root "TPG_Fuel_and_Luuuube_Pro_v110"
+$pkg = Join-Path $root "TPG_Fuel_and_Luuuube_Ultra_v120"
 $shapes = Join-Path $pkg "Shapes"
 $textures = Join-Path $pkg "Textures"
 $db = Join-Path $pkg "Database"
 New-Item -ItemType Directory -Force -Path $shapes,$textures,$db | Out-Null
 
-Copy-Item (Join-Path $root "TPG_Fuel_and_Luuuube_Pro_v110.edm") $shapes -Force
-Copy-Item (Join-Path $root "TPG_Fuel_and_Luuuube_Pro_v110_Destroyed.edm") $shapes -Force
-Copy-Item (Join-Path $root "TPG_Fuel_and_Luuuube_Pro_v110_LOD1.edm") $shapes -Force
-Copy-Item (Join-Path $root "TPG_Fuel_and_Luuuube_Pro_v110_LOD2.edm") $shapes -Force
+Copy-Item (Join-Path $root "TPG_Fuel_and_Luuuube_Ultra_v120.edm") $shapes -Force
+Copy-Item (Join-Path $root "TPG_Fuel_and_Luuuube_Ultra_v120_Destroyed.edm") $shapes -Force
+Copy-Item (Join-Path $root "TPG_Fuel_and_Luuuube_Ultra_v120_LOD1.edm") $shapes -Force
+Copy-Item (Join-Path $root "TPG_Fuel_and_Luuuube_Ultra_v120_LOD2.edm") $shapes -Force
 
 $lods = @'
 model={
     lods={
-        {"TPG_Fuel_and_Luuuube_Pro_v110.edm",1200.0};
-        {"TPG_Fuel_and_Luuuube_Pro_v110_LOD1.edm",3500.0};
-        {"TPG_Fuel_and_Luuuube_Pro_v110_LOD2.edm",18000.0};
+        {"TPG_Fuel_and_Luuuube_Ultra_v120.edm",1200.0};
+        {"TPG_Fuel_and_Luuuube_Ultra_v120_LOD1.edm",3500.0};
+        {"TPG_Fuel_and_Luuuube_Ultra_v120_LOD2.edm",18000.0};
     };
-    collision_shell="TPG_Fuel_and_Luuuube_Pro_v110.edm";
+    collision_shell="TPG_Fuel_and_Luuuube_Ultra_v120.edm";
 }
 '@
-Set-Content -Path (Join-Path $shapes "TPG_Fuel_and_Luuuube_Pro_v110.lods") -Value $lods -Encoding ASCII
+Set-Content -Path (Join-Path $shapes "TPG_Fuel_and_Luuuube_Ultra_v120.lods") -Value $lods -Encoding ASCII
 if (Test-Path (Join-Path $root "Textures")) { Copy-Item (Join-Path $root "Textures\*") $textures -Force }
 
 $entry = @'
-declare_plugin("TPG Fuel and Luuuube Pro v1.1.0",
+declare_plugin("TPG Fuel and Luuuube Ultra v1.2.0",
 {
     installed = true,
     dirName = current_mod_path,
-    displayName = _("TPG Fuel and Luuuube Pro v1.1.0"),
-    version = "1.1.0",
+    displayName = _("TPG Fuel and Luuuube Ultra v1.2.0"),
+    version = "1.2.0",
     state = "installed",
-    info = _("TPG pro four-dispenser roadside fuel station static structure")
+    info = _("TPG ultra-detail four-dispenser roadside fuel station static structure")
 })
 mount_vfs_model_path(current_mod_path.."/Shapes")
 mount_vfs_texture_path(current_mod_path.."/Textures")
-dofile(current_mod_path.."/Database/db_tpg_fuel_pro_v110.lua")
+dofile(current_mod_path.."/Database/db_tpg_fuel_ultra_v120.lua")
 plugin_done()
 '@
 Set-Content -Path (Join-Path $pkg "entry.lua") -Value $entry -Encoding UTF8
@@ -65,10 +65,10 @@ local function add_structure(f)
 end
 
 add_structure({
-    Name = "TPG_Fuel_and_Luuuube_Pro_v110",
-    DisplayName = _("TPG Fuel and Luuuube Pro v1.1.0"),
-    ShapeName = "TPG_Fuel_and_Luuuube_Pro_v110",
-    ShapeNameDestr = "TPG_Fuel_and_Luuuube_Pro_v110_Destroyed",
+    Name = "TPG_Fuel_and_Luuuube_Ultra_v120",
+    DisplayName = _("TPG Fuel and Luuuube Ultra v1.2.0"),
+    ShapeName = "TPG_Fuel_and_Luuuube_Ultra_v120",
+    ShapeNameDestr = "TPG_Fuel_and_Luuuube_Ultra_v120_Destroyed",
     Life = 420,
     Rate = 100,
     category = "Structures",
@@ -77,43 +77,43 @@ add_structure({
     numParking = 0,
 })
 '@
-Set-Content -Path (Join-Path $db "db_tpg_fuel_pro_v110.lua") -Value $dbLua -Encoding UTF8
+Set-Content -Path (Join-Path $db "db_tpg_fuel_ultra_v120.lua") -Value $dbLua -Encoding UTF8
 
 $readme = @'
-TPG Fuel and Luuuube Pro v1.1.0
-================================
-Coexistence-safe DCS static structure package.
+TPG Fuel and Luuuube Ultra v1.2.0
+==================================
+Coexistence-safe DCS static structure.
 
 Install:
-Copy the folder "TPG_Fuel_and_Luuuube_Pro_v110" into:
+Copy "TPG_Fuel_and_Luuuube_Ultra_v120" into:
   Saved Games\DCS\Mods\tech\
 
 Mission Editor:
-Static Objects -> Structures -> TPG Fuel and Luuuube Pro v1.1.0
+Static Objects -> Structures -> TPG Fuel and Luuuube Ultra v1.2.0
 
-Coexistence:
-This package uses unique plugin, unit, shape, destroyed-shape, LOD, database,
-folder, and texture namespaces. It is intended to coexist with earlier
-TPG Fuel and Luuuube packages.
+This is a new package and may remain installed alongside earlier TPG station versions.
 
-Features:
-- four physical dispenser cabinets
-- double-sided close-range pump detailing
-- realistic islands, bollards, hoses, screens, grade buttons and labels
-- detailed convenience store with recessed/framed glazing and door hardware
-- fake ads/stickers and humorous micro-signage at LOD0
-- realistic canopy supports, soffit details and lighting geometry
-- HVAC, drains, bins/wiper stands, air/vac, propane area and service clutter
-- dual-post framed price pylon with footings and inset price rows
-- three visual LOD levels
-- dedicated collision geometry
-- separate destroyed EDM with structural-collapse damage
-- NO scorched/charred building or canopy materials in the destroyed state
-- Static Objects -> Structures; not Fortifications
+v1.2 Ultra highlights:
+- four physical high-detail dispenser cabinets
+- modeled grade labels 87 / 89 / 93 and selection buttons
+- detailed payment bays, keypads, card slots, screens and service seams
+- curved hoses plus modeled swivel, breakaway, cradle, nozzle body, trigger guard,
+  trigger, metal spout, rubber boot and fittings
+- realistic bollard caps, base plates and anchor fasteners
+- rebuilt roadside pylon typography, spacing, price rows, dividers and service hardware
+- actual layered ad artwork rather than plain text rectangles
+- grounded curb-mounted rooftop HVAC units with louvers, condenser fan grilles,
+  access-panel screws, disconnect boxes and conduit
+- roof vents sit on flashing boots with risers, caps and visible fasteners
+- extra roof/parapet/scupper detailing
+- destroyed state keeps structural collapse but adds strong fire-blackening,
+  soot, char, burned pump internals and ground scorch areas
+- LOD1 removes micro-fasteners/text to avoid shimmer; LOD2 preserves station massing
+- Structures category, not Fortifications
 '@
 Set-Content -Path (Join-Path $pkg "README.txt") -Value $readme -Encoding UTF8
 
-$zip = Join-Path $root "TPG_Fuel_and_Luuuube_Pro_v110_DCS_DropIn.zip"
+$zip = Join-Path $root "TPG_Fuel_and_Luuuube_Ultra_v120_DCS_DropIn.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }
 Compress-Archive -Path $pkg -DestinationPath $zip -CompressionLevel Optimal
 Write-Host "Packaged $zip"
