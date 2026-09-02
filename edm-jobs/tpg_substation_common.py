@@ -151,15 +151,54 @@ def bolt_ring(prefix,center,radius,z,count,mat,bolt_r=.035,bolt_h=.045):
             bolt_r,bolt_h,mat,8)
 
 def insulator_stack(name,loc,height,M,detail=2,brown=False):
+    # One revolved mesh per insulator stack instead of dozens of child objects.
+    # Keeps real skirt silhouette at close range while dramatically reducing EDM scene-node count.
     mat=M["brown_porcelain"] if brown else M["porcelain"]
-    discs=10 if detail>=2 else 5
+    discs=10 if detail>=2 else (6 if detail==1 else 3)
+    seg=16 if detail>=2 else (12 if detail==1 else 8)
+    z0=loc[2]-height/2
     step=height/discs
+    profile=[]
     for i in range(discs):
-        z=loc[2]-height/2+(i+.5)*step
-        cyl(f"{name}_core_{i}",(loc[0],loc[1],z),.075,step*.90,mat,12)
-        torus(f"{name}_disc_{i}",(loc[0],loc[1],z),.145,.035,mat,major_segments=14 if detail>=2 else 10,minor_segments=6)
-    cyl(name+"_rod",loc,.035,height+0.12,M["steel"],10)
-    return True
+        base=z0+i*step
+        # stacked shed profile: narrow neck -> shoulder -> wide porcelain skirt -> underside -> neck
+        profile.extend([
+            (base+.02*step,.070),
+            (base+.16*step,.085),
+            (base+.32*step,.145),
+            (base+.47*step,.175 if detail>=2 else .155),
+            (base+.58*step,.130),
+            (base+.72*step,.085),
+            (base+.96*step,.070),
+        ])
+    verts=[]
+    for z,r in profile:
+        for j in range(seg):
+            ang=2*math.pi*j/seg
+            verts.append((loc[0]+r*math.cos(ang),loc[1]+r*math.sin(ang),z))
+    faces=[]
+    rings=len(profile)
+    for ri in range(rings-1):
+        for j in range(seg):
+            n=(j+1)%seg
+            a0=ri*seg+j; a1=ri*seg+n
+            b0=(ri+1)*seg+j; b1=(ri+1)*seg+n
+            faces.append((a0,a1,b1,b0))
+    # close the ends
+    verts.append((loc[0],loc[1],profile[0][0])); bot=len(verts)-1
+    verts.append((loc[0],loc[1],profile[-1][0])); top=len(verts)-1
+    for j in range(seg):
+        n=(j+1)%seg
+        faces.append((bot,n,j))
+        a0=(rings-1)*seg+j; a1=(rings-1)*seg+n
+        faces.append((top,a0,a1))
+    mesh=bpy.data.meshes.new(name+"_mesh")
+    mesh.from_pydata(verts,[],faces); mesh.update()
+    o=bpy.data.objects.new(name,mesh); bpy.context.collection.objects.link(o)
+    o.data.materials.append(mat)
+    # continuous galvanized/copper core rod remains a separate simple object
+    cyl(name+"_rod",loc,.033,height+.12,M["steel"],8 if detail<2 else 12)
+    return o
 
 def lattice_post(name,x,y,z0,h,M,detail=2,width=.72):
     # four-leg galvanized lattice with diagonal bracing
