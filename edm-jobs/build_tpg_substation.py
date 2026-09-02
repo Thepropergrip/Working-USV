@@ -1,4 +1,9 @@
-import bpy, math, os, random
+import bpy, math, os, random, sys
+from pathlib import Path
+WORKSPACE = Path(os.environ.get("GITHUB_WORKSPACE", os.getcwd())).resolve()
+EDM_JOBS = WORKSPACE / "edm-jobs"
+if str(EDM_JOBS) not in sys.path:
+    sys.path.insert(0, str(EDM_JOBS))
 from tpg_substation_common import *
 
 DESTROYED = os.environ.get("TPG_SUB_DESTROYED","0") == "1"
