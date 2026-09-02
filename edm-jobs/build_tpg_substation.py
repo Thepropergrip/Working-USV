@@ -10,7 +10,11 @@ DESTROYED = os.environ.get("TPG_SUB_DESTROYED","0") == "1"
 LOD = int(os.environ.get("TPG_SUB_LOD","0"))
 DETAIL = 2 if LOD==0 else (1 if LOD==1 else 0)
 
-bpy.ops.wm.read_factory_settings(use_empty=True)
+# Keep the registered ED exporter property groups intact; only clear scene objects.
+if bpy.context.object and bpy.context.object.mode != "OBJECT":
+    bpy.ops.object.mode_set(mode="OBJECT")
+bpy.ops.object.select_all(action="SELECT")
+bpy.ops.object.delete(use_global=False)
 M=mats()
 
 def base():
