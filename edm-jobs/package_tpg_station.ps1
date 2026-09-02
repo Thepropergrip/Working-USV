@@ -30,7 +30,7 @@ declare_plugin("TPG Fuel and Luuuube",
     installed = true,
     dirName = current_mod_path,
     displayName = _("TPG Fuel and Luuuube"),
-    version = "1.0.0",
+    version = "1.1.0",
     state = "installed",
     info = _("TPG four-position roadside fuel station static structure")
 })
@@ -80,7 +80,7 @@ add_structure({
 Set-Content -Path (Join-Path $db "db_tpg_fuel.lua") -Value $dbLua -Encoding UTF8
 
 $readme = @'
-TPG Fuel and Luuuube v1.0.0
+TPG Fuel and Luuuube v1.1.0
 ================================
 DCS static structure.
 
