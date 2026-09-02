@@ -6,22 +6,22 @@ $textures = Join-Path $pkg "Textures"
 $db = Join-Path $pkg "Database"
 New-Item -ItemType Directory -Force -Path $shapes,$textures,$db | Out-Null
 
-Copy-Item (Join-Path $root "TPG_Fuel_and_Luuuube_Pro_v110_Pro_v110.edm") $shapes -Force
-Copy-Item (Join-Path $root "TPG_Fuel_and_Luuuube_Pro_v110_Pro_v110_Destroyed.edm") $shapes -Force
-Copy-Item (Join-Path $root "TPG_Fuel_and_Luuuube_Pro_v110_Pro_v110_LOD1.edm") $shapes -Force
-Copy-Item (Join-Path $root "TPG_Fuel_and_Luuuube_Pro_v110_Pro_v110_LOD2.edm") $shapes -Force
+Copy-Item (Join-Path $root "TPG_Fuel_and_Luuuube_Pro_v110.edm") $shapes -Force
+Copy-Item (Join-Path $root "TPG_Fuel_and_Luuuube_Pro_v110_Destroyed.edm") $shapes -Force
+Copy-Item (Join-Path $root "TPG_Fuel_and_Luuuube_Pro_v110_LOD1.edm") $shapes -Force
+Copy-Item (Join-Path $root "TPG_Fuel_and_Luuuube_Pro_v110_LOD2.edm") $shapes -Force
 
 $lods = @'
 model={
     lods={
-        {"TPG_Fuel_and_Luuuube_Pro_v110_Pro_v110.edm",1200.0};
-        {"TPG_Fuel_and_Luuuube_Pro_v110_Pro_v110_LOD1.edm",3500.0};
-        {"TPG_Fuel_and_Luuuube_Pro_v110_Pro_v110_LOD2.edm",18000.0};
+        {"TPG_Fuel_and_Luuuube_Pro_v110.edm",1200.0};
+        {"TPG_Fuel_and_Luuuube_Pro_v110_LOD1.edm",3500.0};
+        {"TPG_Fuel_and_Luuuube_Pro_v110_LOD2.edm",18000.0};
     };
-    collision_shell="TPG_Fuel_and_Luuuube_Pro_v110_Pro_v110.edm";
+    collision_shell="TPG_Fuel_and_Luuuube_Pro_v110.edm";
 }
 '@
-Set-Content -Path (Join-Path $shapes "TPG_Fuel_and_Luuuube_Pro_v110_Pro_v110.lods") -Value $lods -Encoding ASCII
+Set-Content -Path (Join-Path $shapes "TPG_Fuel_and_Luuuube_Pro_v110.lods") -Value $lods -Encoding ASCII
 if (Test-Path (Join-Path $root "Textures")) { Copy-Item (Join-Path $root "Textures\*") $textures -Force }
 
 $entry = @'
@@ -32,7 +32,7 @@ declare_plugin("TPG Fuel and Luuuube Pro v1.1.0",
     displayName = _("TPG Fuel and Luuuube Pro v1.1.0"),
     version = "1.1.0",
     state = "installed",
-    info = _("TPG four-position roadside fuel station static structure")
+    info = _("TPG pro four-dispenser roadside fuel station static structure")
 })
 mount_vfs_model_path(current_mod_path.."/Shapes")
 mount_vfs_texture_path(current_mod_path.."/Textures")
@@ -80,34 +80,40 @@ add_structure({
 Set-Content -Path (Join-Path $db "db_tpg_fuel_pro_v110.lua") -Value $dbLua -Encoding UTF8
 
 $readme = @'
-TPG Fuel and Luuuube Pro v1.1.0 v1.1.0
+TPG Fuel and Luuuube Pro v1.1.0
 ================================
-DCS static structure.
+Coexistence-safe DCS static structure package.
 
 Install:
 Copy the folder "TPG_Fuel_and_Luuuube_Pro_v110" into:
   Saved Games\DCS\Mods\tech\
-(or Saved Games\DCS.openbeta\Mods\tech\ if your install still uses that folder name)
 
 Mission Editor:
 Static Objects -> Structures -> TPG Fuel and Luuuube Pro v1.1.0
 
+Coexistence:
+This package uses unique plugin, unit, shape, destroyed-shape, LOD, database,
+folder, and texture namespaces. It is intended to coexist with earlier
+TPG Fuel and Luuuube packages.
+
 Features:
-- 2 pump islands
-- 1 double-sided dispenser on each island
-- 4 total fueling positions
-- TPG Fuel and Luuuube Pro v1.1.0 branding
-- Regular 87 price starts at $3.95/gal
-- detailed convenience store, framed/recessed glazing, door hardware, stickers and fake ads\n- realistic canopy structure, soffit seams/lights, HVAC, drains, bins/wiper stands, air/vac and propane area\n- dual-post framed price pylon with footings, service panel, fasteners and inset grade/price rows
-- dedicated collision shells
-- three visual LOD levels (LOD0 / LOD1 / LOD2)
-- separate destroyed EDM using structural-collapse damage only; building/canopy materials are intentionally NOT scorched or charred
-- textured PBR materials generated for DCS EDM export\n- humorous micro-signage at LOD0, removed from distance LODs to prevent shimmer
-- static structure registration; not Fortifications
+- four physical dispenser cabinets
+- double-sided close-range pump detailing
+- realistic islands, bollards, hoses, screens, grade buttons and labels
+- detailed convenience store with recessed/framed glazing and door hardware
+- fake ads/stickers and humorous micro-signage at LOD0
+- realistic canopy supports, soffit details and lighting geometry
+- HVAC, drains, bins/wiper stands, air/vac, propane area and service clutter
+- dual-post framed price pylon with footings and inset price rows
+- three visual LOD levels
+- dedicated collision geometry
+- separate destroyed EDM with structural-collapse damage
+- NO scorched/charred building or canopy materials in the destroyed state
+- Static Objects -> Structures; not Fortifications
 '@
 Set-Content -Path (Join-Path $pkg "README.txt") -Value $readme -Encoding UTF8
 
-$zip = Join-Path $root "TPG_Fuel_and_Luuuube_Pro_v110_Pro_v110_DCS_DropIn.zip"
+$zip = Join-Path $root "TPG_Fuel_and_Luuuube_Pro_v110_DCS_DropIn.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }
 Compress-Archive -Path $pkg -DestinationPath $zip -CompressionLevel Optimal
 Write-Host "Packaged $zip"
