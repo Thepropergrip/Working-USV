@@ -8,8 +8,9 @@ build_station(False)
 # but strip tiny retail clutter/fasteners/text that would shimmer at distance.
 micro_tokens=(
     "hose","NOZZLE","HVAC_SLAT","WIPER","DOOR_HANDLE","PRICE_FASTENER",
-    "DRAIN_SLAT","GRADE_","NO_SMOKE","_PAY_","PUSH","WIN_AD_","PROPANE_",
-    "METER_FACE","A_FRAME_","CANOPY_LIGHT_","SOFFIT_SEAM_"
+    "DRAIN_SLAT","KEY_","CAB_BOLT","ANCHOR_","NO_SMOKE","_PAY_","PUSH","AD_",
+    "PROPANE_","METER_FACE","A_FRAME_","CANOPY_LIGHT_","SOFFIT_SEAM_","HVAC_1_SCREW",
+    "HVAC_2_SCREW","HVAC_3_SCREW","VENT_1_SCREW","VENT_2_SCREW","PARAPET_SCREW"
 )
 for o in list(bpy.data.objects):
     n=o.name.upper()
