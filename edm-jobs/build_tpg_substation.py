@@ -18,11 +18,11 @@ bpy.ops.object.delete(use_global=False)
 M=mats()
 
 def base():
-    box("YARD_GRAVEL",(0,0,-.18),(120,90,.36),M["gravel"],.0,coll=True)
+    box("YARD_GRAVEL",(0,0,-.18),(120,90,.36),M["gravel"],.0)
     # perimeter concrete curb / transformer containment pads
-    box("CTRL_PAD",(-39,-28,.10),(19,13,.20),M["concrete"],.03,coll=True)
+    box("CTRL_PAD",(-39,-28,.10),(19,13,.20),M["concrete"],.03)
     for x in (-20,20):
-        box(f"XFMR_PAD_{x}",(x,0,.18),(18,14,.36),M["concrete"],.05,coll=True)
+        box(f"XFMR_PAD_{x}",(x,0,.18),(18,14,.36),M["concrete"],.05)
         box(f"XFMR_BUND_{x}",(x,0,.31),(20,16,.22),M["concrete"],.02)
     # access road, irregular concrete service walks, and cable trench covers
     box("ACCESS_ROAD",(0,-35,.04),(110,9,.10),M["concrete"],.01)
@@ -73,8 +73,8 @@ def fence():
 def control_building():
     # Brick relay/control house and foreground service buildings match the locked reference composition.
     x,y=-41,-27
-    box("CTRL_BUILDING",(x,y,2.7),(18,12,5.4),M["brick"],.045,coll=True)
-    box("CTRL_ROOF",(x,y,5.62),(18.7,12.7,.42),M["roof"],.035,coll=True)
+    box("CTRL_BUILDING",(x,y,2.7),(18,12,5.4),M["brick"],.045)
+    box("CTRL_ROOF",(x,y,5.62),(18.7,12.7,.42),M["roof"],.035)
     # simple brick courses give close-range relief without depending on a flat photo texture
     if DETAIL>=2:
         for z in [0.35+i*.34 for i in range(15)]:
@@ -112,11 +112,11 @@ def control_building():
 
     # Reference foreground service shed and cabinets.
     sx,sy=-43,-13
-    box("SERVICE_SHED",(sx,sy,1.8),(8.0,6.0,3.6),M["beige"],.035,coll=True)
+    box("SERVICE_SHED",(sx,sy,1.8),(8.0,6.0,3.6),M["beige"],.035)
     box("SERVICE_SHED_ROOF",(sx,sy,3.76),(8.45,6.45,.32),M["roof"],.035)
     box("SERVICE_SHED_DOOR",(sx+2.2,sy-3.03,1.35),(1.7,.10,2.7),M["steel"],.02)
     for i,(cx,cy,mat) in enumerate(((-31,-19,M["galv"]),(-25,-22,M["galv"]),(-18,-25,M["green"]))):
-        box(f"UTILITY_CAB_{i}",(cx,cy,1.25),(3.0,2.0,2.5),mat,.05,coll=True)
+        box(f"UTILITY_CAB_{i}",(cx,cy,1.25),(3.0,2.0,2.5),mat,.05)
         box(f"UTILITY_CAB_DOOR_{i}",(cx,cy-1.02,1.30),(2.45,.035,2.10),M["galv"] if i==2 else M["steel"],.012)
         if DETAIL>=2:
             text_obj("DANGER",f"UTILITY_WARN_{i}",(cx,cy-1.06,1.75),.15,M["yellow"],extrude=.004)
@@ -126,7 +126,7 @@ def transformer(cx,cy,idx,damaged=False):
     z=.8
     body_mat=M["burnt"] if damaged else M["xfmr"]
     # main tank and bolted top cover
-    box(f"XF{idx}_TANK",(cx,cy,z+2.7),(7.6,4.7,5.4),body_mat,.14,coll=True)
+    box(f"XF{idx}_TANK",(cx,cy,z+2.7),(7.6,4.7,5.4),body_mat,.14)
     box(f"XF{idx}_TOP",(cx,cy,z+5.48),(8.1,5.15,.28),body_mat,.06)
     if DETAIL>=2:
         for x in (-3.5,-1.75,0,1.75,3.5):
@@ -289,6 +289,33 @@ def yard_details():
             box(f"IDPLATE_{i}",(x,24.94,1.0),(.65,.035,.35),M["white"],.003)
             text_obj(f"{100+i}",f"IDTEXT_{i}",(x,24.90,1.0),.12,M["black"],extrude=.003)
 
+def consolidate_visuals():
+    # Merge static render meshes by single material. This preserves all geometry/UVs/text
+    # but cuts thousands of EDM scene nodes down to a few dozen material batches.
+    # Keep explicit collision proxies separate.
+    groups={}
+    for o in list(bpy.context.scene.objects):
+        if o.type!="MESH" or o.name.startswith("COLL_") or o.name=="ORIGIN_HELPER":
+            continue
+        if len(o.data.materials)!=1:
+            continue
+        mat=o.data.materials[0]
+        if mat is None:
+            continue
+        groups.setdefault(mat.name,[]).append(o)
+    for mat_name,objs in groups.items():
+        if len(objs)<2:
+            continue
+        bpy.ops.object.select_all(action="DESELECT")
+        for o in objs:
+            if o.name in bpy.context.scene.objects:
+                o.select_set(True)
+        active=objs[0]
+        bpy.context.view_layer.objects.active=active
+        bpy.ops.object.join()
+        active.name="BATCH_"+mat_name
+    print("TPG visual consolidation complete:",len(groups),"material groups")
+
 def destroyed_overlays():
     if not DESTROYED: return
     # collapsed lattice, snapped bus, scorched gravel, fractured control building edge
@@ -309,11 +336,12 @@ switchyard()
 towers_and_lines()
 yard_details()
 destroyed_overlays()
+consolidate_visuals()
 
 # Dedicated simple collision masses for large objects/yard limits; visual mesh collision flags are already set on major masses.
-box("COLL_CTRL",(-39,-28,2.7),(17,11,5.4),None,0,coll=True)
-for x in (-20,20):
-    box(f"COLL_XFMR_{x}",(x,0,3.0),(9,7,6.0),None,0,coll=True)
+box("COLL_CTRL",(-41,-27,2.7),(18,12,5.4),None,0,coll=True)
+for i,(x,y) in enumerate(((-23,10),(22,-4)),1):
+    box(f"COLL_XFMR_{i}",(x,y,3.5),(10,8,7.0),None,0,coll=True)
 
 # World origin helper kept tiny and hidden below grade; ensures stable bounds.
 box("ORIGIN_HELPER",(0,0,-.45),(.1,.1,.1),M["gravel"],0)
