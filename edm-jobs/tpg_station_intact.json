@@ -1,0 +1,6 @@
+{
+  "mode": "script",
+  "script": "edm-jobs/build_tpg_station_intact.py",
+  "output": "TPG_Fuel_and_Luuuube.edm",
+  "save_blend": true
+}
