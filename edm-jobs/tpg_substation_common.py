@@ -69,6 +69,10 @@ def mats():
     MATS.update({
         "gravel":edm_mat("TPG_SUB100_Gravel",(0.34,.33,.30),.98,0,.09,True),
         "concrete":edm_mat("TPG_SUB100_Concrete",(.48,.47,.44),.92,0,.055,True),
+        "brick":edm_mat("TPG_SUB100_UtilityBrick",(.31,.285,.255),.90,0,.060,True),
+        "brick_mortar":edm_mat("TPG_SUB100_BrickMortar",(.54,.53,.50),.95,0,.035,True),
+        "beige":edm_mat("TPG_SUB100_ServiceBeige",(.62,.60,.53),.76,.02,.030,True),
+        "glass":edm_mat("TPG_SUB100_WindowGlass",(.055,.085,.095),.18,.08,.012),
         "galv":edm_mat("TPG_SUB100_Galvanized",(.48,.50,.51),.35,.78,.035,True),
         "steel":edm_mat("TPG_SUB100_Steel",(.24,.26,.27),.42,.72,.026,True),
         "xfmr":edm_mat("TPG_SUB100_TransformerGray",(.37,.42,.42),.56,.26,.028,True),
