@@ -1,6 +1,6 @@
 {
   "mode": "script",
   "script": "edm-jobs/build_tpg_station_destroyed.py",
-  "output": "TPG_Gas_Station_V1_Destroyed.edm",
+  "output": "TPG_Gas_Station_V1_1_Destroyed.edm",
   "save_blend": true
 }
