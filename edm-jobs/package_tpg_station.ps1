@@ -1,39 +1,40 @@
 $ErrorActionPreference = "Stop"
 $root = Join-Path $env:GITHUB_WORKSPACE "edm-artifacts"
-$pkg = Join-Path $root "TPG_Gas_Station_V1"
+$pkg = Join-Path $root "TPG_Gas_Station_V1_1"
 $shapes = Join-Path $pkg "Shapes"
 $textures = Join-Path $pkg "Textures"
 $db = Join-Path $pkg "Database"
 New-Item -ItemType Directory -Force -Path $shapes,$textures,$db | Out-Null
 
-Copy-Item (Join-Path $root "TPG_Gas_Station_V1.edm") $shapes -Force
-Copy-Item (Join-Path $root "TPG_Gas_Station_V1_Destroyed.edm") $shapes -Force
-Copy-Item (Join-Path $root "TPG_Gas_Station_V1_LOD1.edm") $shapes -Force
-Copy-Item (Join-Path $root "TPG_Gas_Station_V1_LOD2.edm") $shapes -Force
+Copy-Item (Join-Path $root "TPG_Gas_Station_V1_1.edm") $shapes -Force
+Copy-Item (Join-Path $root "TPG_Gas_Station_V1_1_Destroyed.edm") $shapes -Force
+Copy-Item (Join-Path $root "TPG_Gas_Station_V1_1_LOD1.edm") $shapes -Force
+Copy-Item (Join-Path $root "TPG_Gas_Station_V1_1_LOD2.edm") $shapes -Force
+Copy-Item (Join-Path $root "TPG_Gas_Station_V1_1_Collision.edm") $shapes -Force
 
 $lods = @'
 model={
     lods={
-        {"TPG_Gas_Station_V1.edm",1200.0};
-        {"TPG_Gas_Station_V1_LOD1.edm",3500.0};
-        {"TPG_Gas_Station_V1_LOD2.edm",18000.0};
+        {"TPG_Gas_Station_V1_1.edm",1200.0};
+        {"TPG_Gas_Station_V1_1_LOD1.edm",3500.0};
+        {"TPG_Gas_Station_V1_1_LOD2.edm",18000.0};
     };
-    collision_shell="TPG_Gas_Station_V1.edm";
+    collision_shell="TPG_Gas_Station_V1_1_Collision.edm";
 }
 '@
-Set-Content -Path (Join-Path $shapes "TPG_Gas_Station_V1.lods") -Value $lods -Encoding ASCII
+Set-Content -Path (Join-Path $shapes "TPG_Gas_Station_V1_1.lods") -Value $lods -Encoding ASCII
 
 if (Test-Path (Join-Path $root "Textures")) {
     Copy-Item (Join-Path $root "Textures\*") $textures -Force
 }
 
 $entry = @'
-declare_plugin("TPG Gas Station V1.0",
+declare_plugin("TPG Gas Station V1.1",
 {
     installed = true,
     dirName = current_mod_path,
-    displayName = _("TPG Gas Station V1.0"),
-    version = "1.0.0",
+    displayName = _("TPG Gas Station V1.1"),
+    version = "1.1.0",
     state = "installed",
     info = _("Four-dispenser roadside gas station static structure")
 })
@@ -70,10 +71,10 @@ local function add_structure(f)
 end
 
 add_structure({
-    Name = "TPG_Gas_Station_V1",
-    DisplayName = _("TPG Gas Station V1.0"),
-    ShapeName = "TPG_Gas_Station_V1",
-    ShapeNameDestr = "TPG_Gas_Station_V1_Destroyed",
+    Name = "TPG_Gas_Station_V1_1",
+    DisplayName = _("TPG Gas Station V1.1"),
+    ShapeName = "TPG_Gas_Station_V1_1",
+    ShapeNameDestr = "TPG_Gas_Station_V1_1_Destroyed",
     Life = 420,
     Rate = 100,
     category = "Structures",
@@ -85,28 +86,28 @@ add_structure({
 Set-Content -Path (Join-Path $db "db_tpg_gas_station.lua") -Value $dbLua -Encoding UTF8
 
 $readme = @'
-TPG Gas Station V1.0
+TPG Gas Station V1.1
 ====================
 
 Install:
-Copy the folder "TPG_Gas_Station_V1" into:
+Copy the folder "TPG_Gas_Station_V1_1" into:
   Saved Games\DCS\Mods\tech\
 
 Mission Editor:
-Static Objects -> Structures -> TPG Gas Station V1.0
+Static Objects -> Structures -> TPG Gas Station V1.1
 
 Contents:
 - Four detailed fuel dispensers
 - Convenience store and canopy
 - Roadside price sign
 - Rooftop HVAC and vent details
-- Collision geometry
+- Vehicle-friendly collision geometry
 - Distance LODs
 - Separate destroyed model
 '@
 Set-Content -Path (Join-Path $pkg "README.txt") -Value $readme -Encoding UTF8
 
-$zip = Join-Path $root "TPG_Gas_Station_V1.0_DCS_DropIn.zip"
+$zip = Join-Path $root "TPG_Gas_Station_V1.1_DCS_DropIn.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }
 Compress-Archive -Path $pkg -DestinationPath $zip -CompressionLevel Optimal
 Write-Host "Packaged $zip"
