@@ -1,6 +1,6 @@
 {
   "mode": "script",
   "script": "edm-jobs/build_tpg_station_intact.py",
-  "output": "TPG_Gas_Station_V1.edm",
+  "output": "TPG_Gas_Station_V1_1.edm",
   "save_blend": true
 }
