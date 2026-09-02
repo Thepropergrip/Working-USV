@@ -7,6 +7,11 @@ on:
         description: "Path to EDM job JSON"
         required: false
         default: "edm-jobs/job.json"
+  pull_request:
+    paths:
+      - ".github/workflows/dcs-edm-export.yml"
+      - "tools/dcs-edm/**"
+      - "edm-jobs/**"
   push:
     paths:
       - ".github/workflows/dcs-edm-export.yml"
