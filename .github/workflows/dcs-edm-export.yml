@@ -7,11 +7,6 @@ on:
         description: "Path to EDM job JSON"
         required: false
         default: "edm-jobs/job.json"
-  pull_request:
-    paths:
-      - ".github/workflows/dcs-edm-export.yml"
-      - "tools/dcs-edm/**"
-      - "edm-jobs/**"
   push:
     paths:
       - ".github/workflows/dcs-edm-export.yml"
@@ -84,6 +79,29 @@ jobs:
           "EDM_EXPORTER_COMMIT=$env:ED_EXPORTER_COMMIT" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           Write-Host "Official ED exporter pinned at $env:ED_EXPORTER_COMMIT"
 
+      - name: Select export job
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $requested = ""
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $requested = "${{ inputs.job_path }}"
+          }
+
+          if ($requested -and (Test-Path $requested)) {
+            $job = (Resolve-Path $requested).Path
+          }
+          elseif (Test-Path "edm-jobs/job.json") {
+            $job = (Resolve-Path "edm-jobs/job.json").Path
+          }
+          else {
+            $job = (Resolve-Path "tools/dcs-edm/selftest-job.json").Path
+          }
+
+          "EDM_JOB_PATH=$job" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "EDM job: $job"
+
       - name: Export EDM
         shell: pwsh
         run: |
@@ -91,24 +109,9 @@ jobs:
           $out = Join-Path $env:GITHUB_WORKSPACE "edm-artifacts"
           New-Item -ItemType Directory -Force -Path $out | Out-Null
 
-          $isTpg = ("${{ github.event_name }}" -eq "pull_request" -and "${{ github.head_ref }}" -eq "tpg-gas-station")
-          if ($isTpg) {
-            foreach ($job in @("edm-jobs/tpg_station_intact.json","edm-jobs/tpg_station_lod1.json","edm-jobs/tpg_station_lod2.json","edm-jobs/tpg_station_destroyed.json")) {
-              & $env:BLENDER_EXE --background --python "tools/dcs-edm/export_job.py" -- --job "$job" --artifact-dir "$out"
-              if ($LASTEXITCODE -ne 0) { throw "TPG station EDM export failed for $job with exit code $LASTEXITCODE" }
-            }
-            & "edm-jobs/package_tpg_station.ps1"
-            if ($LASTEXITCODE -ne 0) { throw "TPG station packaging failed with exit code $LASTEXITCODE" }
-          }
-          else {
-            $requested = ""
-            if ("${{ github.event_name }}" -eq "workflow_dispatch") { $requested = "${{ inputs.job_path }}" }
-            if ($requested -and (Test-Path $requested)) { $job = $requested }
-            elseif (Test-Path "edm-jobs/job.json") { $job = "edm-jobs/job.json" }
-            else { $job = "tools/dcs-edm/selftest-job.json" }
-
-            & $env:BLENDER_EXE --background --python "tools/dcs-edm/export_job.py" -- --job "$job" --artifact-dir "$out"
-            if ($LASTEXITCODE -ne 0) { throw "Blender/EDM export failed with exit code $LASTEXITCODE" }
+          & $env:BLENDER_EXE --background --python "tools/dcs-edm/export_job.py" -- --job "$env:EDM_JOB_PATH" --artifact-dir "$out"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Blender/EDM export failed with exit code $LASTEXITCODE"
           }
 
           $edm = Get-ChildItem -Path $out -Filter *.edm -File
