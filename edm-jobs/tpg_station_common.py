@@ -140,9 +140,17 @@ def build_station(destroyed=False):
     # storefront glazing and frames
     for x in (-6.7,-4.5,-2.3,2.3,4.5,6.7):
         box("GLASS_"+str(x),(x,4.46,2.05),(1.75,.06,2.55),M["glass"],.015)
-        box("FRAME_"+str(x),(x,4.40,2.05),(1.88,.05,2.68),M["charcoal"],.015)
+        # proper mullions instead of a solid frame plate
+        box("FRAME_L_"+str(x),(x-.91,4.40,2.05),(.07,.06,2.68),M["charcoal"],.01)
+        box("FRAME_R_"+str(x),(x+.91,4.40,2.05),(.07,.06,2.68),M["charcoal"],.01)
+        box("FRAME_T_"+str(x),(x,4.40,3.36),(1.88,.06,.07),M["charcoal"],.01)
+        box("FRAME_B_"+str(x),(x,4.40,.74),(1.88,.06,.07),M["charcoal"],.01)
     box("DOOR_GLASS",(0,4.43,1.75),(1.65,.07,3.15),M["glass"],.015)
-    box("DOOR_FRAME",(0,4.39,1.75),(1.86,.05,3.35),M["charcoal"],.015)
+    box("DOOR_L",(-.88,4.39,1.75),(.08,.06,3.35),M["charcoal"],.01)
+    box("DOOR_R",(.88,4.39,1.75),(.08,.06,3.35),M["charcoal"],.01)
+    box("DOOR_T",(0,4.39,3.39),(1.84,.06,.08),M["charcoal"],.01)
+    box("DOOR_B",(0,4.39,.11),(1.84,.06,.08),M["charcoal"],.01)
+    box("DOOR_HANDLE",(.55,4.31,1.78),(.07,.06,.72),M["metal"],.01)
     text_obj("TPG FUEL AND LUUUUBE","STORE_SIGN",(0,4.17,4.05),.58,M["red"],rot=(math.radians(90),0,0),extrude=.04)
 
     # canopy, generous light soffit and visible brand band
