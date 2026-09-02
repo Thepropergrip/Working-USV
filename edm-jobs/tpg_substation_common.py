@@ -194,6 +194,18 @@ def insulator_stack(name,loc,height,M,detail=2,brown=False):
         faces.append((top,a0,a1))
     mesh=bpy.data.meshes.new(name+"_mesh")
     mesh.from_pydata(verts,[],faces); mesh.update()
+    # ED default material export requires a UV layer. Map U around the revolved circumference,
+    # V along stack height so porcelain/grime textures remain stable and continuous.
+    uv=mesh.uv_layers.new(name="UVMap")
+    zmin=profile[0][0]; zmax=profile[-1][0]; zr=max(0.001,zmax-zmin)
+    for poly in mesh.polygons:
+        for li in poly.loop_indices:
+            vi=mesh.loops[li].vertex_index
+            vx,vy,vz=mesh.vertices[vi].co
+            dx=vx-loc[0]; dy=vy-loc[1]
+            u=(math.atan2(dy,dx)/(2*math.pi))%1.0 if abs(dx)+abs(dy)>1e-8 else 0.5
+            v=max(0.0,min(1.0,(vz-zmin)/zr))
+            uv.data[li].uv=(u,v)
     o=bpy.data.objects.new(name,mesh); bpy.context.collection.objects.link(o)
     o.data.materials.append(mat)
     # continuous galvanized/copper core rod remains a separate simple object
