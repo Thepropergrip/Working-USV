@@ -147,7 +147,7 @@ def _surface_maps(key, base, seed, profile="paint", size=1024, rough=0.65, metal
     metallic=np.full((size,size),metal,dtype=np.float32)
     roughmet=np.stack([local_rough,metallic,ao],axis=2)
 
-    prefix=f"tpg_gas_{key.lower()}"
+    prefix=f"tpg_gas_hr_{key.lower()}"
     return (
         _save_rgba(prefix+"_albedo", albedo, size, "sRGB"),
         _save_rgba(prefix+"_roughmet", roughmet, size, "Non-Color"),
