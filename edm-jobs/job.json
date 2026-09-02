@@ -1,6 +1,6 @@
 {
   "mode": "script",
-  "script": "edm-jobs/build_grizzly_rc4.py",
-  "output": "TPG_GRIZZLY_HELLFIRE.edm",
+  "script": "edm-jobs/build_tpg_gas_station_intact.py",
+  "output": "TPG_4_Pump_Gas_Station.edm",
   "save_blend": true
 }
