@@ -1,6 +1,6 @@
 {
   "mode": "script",
   "script": "edm-jobs/build_tpg_station_intact.py",
-  "output": "TPG_Fuel_and_Luuuube_Pro_v110.edm",
+  "output": "TPG_Fuel_and_Luuuube_Ultra_v120.edm",
   "save_blend": true
 }
