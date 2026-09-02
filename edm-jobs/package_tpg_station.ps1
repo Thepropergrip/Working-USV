@@ -98,11 +98,11 @@ Features:
 - 4 total fueling positions
 - TPG Fuel and Luuuube branding
 - Regular 87 price starts at $3.95/gal
-- convenience store, canopy, HVAC, bollards, bins/wiper stands, price pylon
+- detailed convenience store, framed/recessed glazing, door hardware, stickers and fake ads\n- realistic canopy structure, soffit seams/lights, HVAC, drains, bins/wiper stands, air/vac and propane area\n- dual-post framed price pylon with footings, service panel, fasteners and inset grade/price rows
 - dedicated collision shells
 - three visual LOD levels (LOD0 / LOD1 / LOD2)
-- separate destroyed EDM
-- textured PBR materials generated for DCS EDM export
+- separate destroyed EDM using structural-collapse damage only; building/canopy materials are intentionally NOT scorched or charred
+- textured PBR materials generated for DCS EDM export\n- humorous micro-signage at LOD0, removed from distance LODs to prevent shimmer
 - static structure registration; not Fortifications
 '@
 Set-Content -Path (Join-Path $pkg "README.txt") -Value $readme -Encoding UTF8
