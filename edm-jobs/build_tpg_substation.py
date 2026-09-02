@@ -15,8 +15,15 @@ def base():
     for x in (-20,20):
         box(f"XFMR_PAD_{x}",(x,0,.18),(18,14,.36),M["concrete"],.05,coll=True)
         box(f"XFMR_BUND_{x}",(x,0,.31),(20,16,.22),M["concrete"],.02)
-    # access road and cable trench covers
+    # access road, irregular concrete service walks, and cable trench covers
     box("ACCESS_ROAD",(0,-35,.04),(110,9,.10),M["concrete"],.01)
+    for x,y,l,w,ang in (
+        (-43,-20,28,1.5,0),(-30,-9,25,1.5,math.radians(90)),
+        (-8,-24,68,1.6,0),(25,-9,30,1.6,math.radians(90)),
+        (20,8,52,1.6,0),(-2,22,82,1.5,0),(44,3,35,1.5,math.radians(90)),
+        (-47,10,24,1.3,math.radians(90))
+    ):
+        box(f"WALK_{x}_{y}",(x,y,.065),(l,w,.13),M["concrete"],.015,rot=(0,0,ang))
     for y in (-18,-8,8,18):
         box(f"TRENCH_{y}",(0,y,.08),(92,1.0,.14),M["concrete"],.015)
         if DETAIL>=1:
@@ -49,33 +56,62 @@ def fence():
     box("GATE_RIGHT",(7,-43.6,1.45),(13,.08,2.7),M["galv"],.01)
     if DETAIL>=2:
         text_obj("DANGER  HIGH VOLTAGE","GATE_WARNING",(0,-43.72,1.65),.34,M["red"],extrude=.009)
+        for i,x in enumerate((-44,-28,-12,12,28,44)):
+            box(f"FENCE_SIGN_{i}",(x,-43.70,1.45),(1.55,.035,.78),M["white"],.004)
+            text_obj("DANGER",f"FENCE_SIGN_TEXT_{i}",(x,-43.74,1.61),.16,M["red"],extrude=.004)
+            text_obj("HIGH VOLTAGE",f"FENCE_SIGN_SUB_{i}",(x,-43.74,1.34),.09,M["black"],extrude=.003)
 
 def control_building():
-    x,y=-39,-28
-    box("CTRL_BUILDING",(x,y,2.7),(17,11,5.4),M["xfmr_dark"],.06,coll=True)
-    box("CTRL_ROOF",(x,y,5.62),(17.8,11.8,.44),M["roof"],.05,coll=True)
-    # doors / windows / utility signage
-    box("CTRL_DOOR",(x+5.4,y-5.54,1.45),(2.05,.12,2.9),M["green"],.025)
-    box("CTRL_DOORFRAME",(x+5.4,y-5.64,1.45),(2.28,.05,3.12),M["galv"],.015)
-    box("CTRL_WINDOW",(x-2.8,y-5.56,2.55),(3.2,.10,1.5),M["black"],.02)
-    text_obj("SUBSTATION CONTROL","CTRL_LABEL",(x,y-5.67,4.42),.42,M["white"],extrude=.010)
-    text_obj("AUTHORIZED PERSONNEL ONLY","CTRL_WARN",(x+4.2,y-5.69,.55),.18,M["yellow"],extrude=.006)
-    # exterior cabinets and HVAC
-    for i,dx in enumerate((-5.5,-3.5,-1.5)):
-        box(f"CTRL_CAB_{i}",(x+dx,y+5.7,1.15),(1.35,.75,2.3),M["galv"],.035)
+    # Brick relay/control house and foreground service buildings match the locked reference composition.
+    x,y=-41,-27
+    box("CTRL_BUILDING",(x,y,2.7),(18,12,5.4),M["brick"],.045,coll=True)
+    box("CTRL_ROOF",(x,y,5.62),(18.7,12.7,.42),M["roof"],.035,coll=True)
+    # simple brick courses give close-range relief without depending on a flat photo texture
+    if DETAIL>=2:
+        for z in [0.35+i*.34 for i in range(15)]:
+            box(f"CTRL_MORTAR_H_{z:.2f}",(x,y-6.025,z),(17.7,.022,.026),M["brick_mortar"],.0)
+        for i,xx in enumerate([x-8.3+j*.7 for j in range(24)]):
+            for row in range(7):
+                z=.52+row*.68
+                off=.35 if row%2 else 0
+                box(f"CTRL_MORTAR_V_{i}_{row}",(xx+off,y-6.03,z),(.022,.024,.31),M["brick_mortar"],.0)
+    # Front door, window, lights and conduits
+    box("CTRL_DOOR",(x+5.8,y-6.06,1.48),(2.05,.13,2.96),M["steel"],.025)
+    box("CTRL_DOORFRAME",(x+5.8,y-6.15,1.48),(2.34,.06,3.24),M["galv"],.012)
+    box("CTRL_WINDOW",(x-2.6,y-6.08,2.55),(3.0,.10,1.55),M["glass"],.018)
+    box("CTRL_WINDOWFRAME",(x-2.6,y-6.14,2.55),(3.28,.035,1.82),M["galv"],.010)
+    for lx in (x-6.4,x+1.4,x+7.4):
+        box(f"CTRL_WALL_LIGHT_{lx}",(lx,y-6.18,3.6),(.42,.25,.28),M["black"],.025)
+    text_obj("SUBSTATION CONTROL","CTRL_LABEL",(x,y-6.19,4.42),.38,M["white"],extrude=.009)
+    text_obj("AUTHORIZED PERSONNEL ONLY","CTRL_WARN",(x+4.1,y-6.20,.58),.17,M["yellow"],extrude=.005)
+    if DETAIL>=1:
+        for i,dx in enumerate((-7.0,-5.0,-3.0)):
+            box(f"CTRL_EXT_PANEL_{i}",(x+dx,y-6.18,1.18),(1.25,.34,2.2),M["galv"],.025)
+            cable(f"CTRL_CONDUIT_{i}",[(x+dx,y-6.38,.1),(x+dx,y-6.38,2.45),(x+dx+.7,y-6.38,2.8)],M["steel"],.028)
+    # Rooftop HVAC with attached curb, visible fans and louvers
+    box("ROOF_HVAC_CURB",(x-3.8,y,5.93),(5.4,3.6,.25),M["galv"],.02)
+    box("ROOF_HVAC",(x-3.8,y,6.75),(5.0,3.25,1.55),M["xfmr"],.05)
+    if DETAIL>=1:
+        for i,dx in enumerate((-1.45,0,1.45)):
+            fan_guard(f"ROOF_HVAC_FAN_{i}",(x-3.8+dx,y-1.66,6.84),.48,M,DETAIL)
+        for i in range(13):
+            box(f"ROOF_HVAC_LOUVER_{i}",(x-6.10+i*.38,y+1.64,6.65),(.20,.025,.82),M["steel"],.003)
+    # Roof vents are physically seated on the roof.
+    for i,dx in enumerate((1.5,4.5,6.7)):
+        cyl(f"ROOFVENT_{i}",(x+dx,y,6.20),.20,.95,M["galv"],14)
+        cyl(f"ROOFVENTCAP_{i}",(x+dx,y,6.70),.32,.09,M["galv"],14)
+
+    # Reference foreground service shed and cabinets.
+    sx,sy=-43,-13
+    box("SERVICE_SHED",(sx,sy,1.8),(8.0,6.0,3.6),M["beige"],.035,coll=True)
+    box("SERVICE_SHED_ROOF",(sx,sy,3.76),(8.45,6.45,.32),M["roof"],.035)
+    box("SERVICE_SHED_DOOR",(sx+2.2,sy-3.03,1.35),(1.7,.10,2.7),M["steel"],.02)
+    for i,(cx,cy,mat) in enumerate(((-31,-19,M["galv"]),(-25,-22,M["galv"]),(-18,-25,M["green"]))):
+        box(f"UTILITY_CAB_{i}",(cx,cy,1.25),(3.0,2.0,2.5),mat,.05,coll=True)
+        box(f"UTILITY_CAB_DOOR_{i}",(cx,cy-1.02,1.30),(2.45,.035,2.10),M["galv"] if i==2 else M["steel"],.012)
         if DETAIL>=2:
-            for z in (.55,1.05,1.55):
-                box(f"CTRL_CAB_LOUVER_{i}_{z}",(x+dx,y+6.085,z),(1.0,.025,.06),M["black"],.004)
-    for i,dx in enumerate((2.8,5.6)):
-        box(f"HVAC_{i}",(x+dx,y+5.72,1.15),(2.25,1.05,2.0),M["xfmr"],.05)
-        fan_guard(f"HVAC_FAN_{i}",(x+dx,y+6.27,1.25),.58,M,DETAIL)
-        if DETAIL>=2:
-            for j in range(10):
-                box(f"HVAC_FIN_{i}_{j}",(x+dx-0.85+j*.19,y+6.28,.55),(.10,.025,.55),M["steel"],.002)
-    # roof vents/conduit
-    for i,dx in enumerate((-5,-1.5,2,5)):
-        cyl(f"ROOFVENT_{i}",(x+dx,y,6.15),.22,1.0,M["galv"],14)
-        cyl(f"ROOFVENTCAP_{i}",(x+dx,y,6.68),.34,.10,M["galv"],14)
+            text_obj("DANGER",f"UTILITY_WARN_{i}",(cx,cy-1.06,1.75),.15,M["yellow"],extrude=.004)
+
 
 def transformer(cx,cy,idx,damaged=False):
     z=.8
@@ -194,14 +230,16 @@ def buswork():
 
 def switchyard():
     # six densely populated bays
-    xs=(-40,-24,-8,8,24,40)
+    xs=(-44,-30,-16,-2,12,26,40,50)
     for i,x in enumerate(xs):
-        breaker(f"BRK_N_{i}",x,13.2)
-        disconnect(f"DS_N_{i}",x,6.6,5.2,open_phase=(i==4))
-        instrument_transformer(f"CT_N_{i}",x,2.0,"CT")
-        arresters(f"SA_N_{i}",x,-2.5)
-        instrument_transformer(f"PT_S_{i}",x,-8.0,"PT")
-        disconnect(f"DS_S_{i}",x,-14.0,5.2,open_phase=False)
+        # equipment staggered to avoid the hero transformers and to mimic a real, imperfect yard
+        yy=15.0 + (1.2 if i%2 else 0)
+        breaker(f"BRK_N_{i}",x,yy)
+        disconnect(f"DS_N_{i}",x,8.1,5.2,open_phase=(i==5))
+        instrument_transformer(f"CT_N_{i}",x,3.0,"CT")
+        arresters(f"SA_N_{i}",x,-1.5)
+        instrument_transformer(f"PT_S_{i}",x,-10.5,"PT")
+        disconnect(f"DS_S_{i}",x,-17.0,5.2,open_phase=False)
         if DETAIL>=1:
             # local marshalling kiosk, cable conduit and bay ID
             box(f"MK_{i}",(x+3.0,10.0,1.0),(1.25,.85,2.0),M["galv"],.03)
@@ -232,9 +270,9 @@ def yard_details():
     for i,(x,y) in enumerate(((-28,4),(28,4),(-28,-4),(28,-4),(-48,-25))):
         cyl(f"FIREPOST_{i}",(x,y,.85),.07,1.7,M["red"],12)
         box(f"FIREBOX_{i}",(x,y,1.5),(.5,.28,.75),M["red"],.03)
-    for i,x in enumerate(range(-48,49,16)):
-        cyl(f"LIGHTPOLE_{i}",(x,-31,4.0),.09,8.0,M["galv"],12)
-        box(f"LIGHTHEAD_{i}",(x,-30.6,7.8),(1.0,.65,.28),M["black"],.03,rot=(math.radians(-12),0,0))
+    for i,(x,y) in enumerate(((-50,-31),(-32,-31),(-10,-31),(12,-31),(34,-31),(51,-18),(51,6),(51,28),(-50,30))):
+        cyl(f"LIGHTPOLE_{i}",(x,y,4.0),.09,8.0,M["galv"],12)
+        box(f"LIGHTHEAD_{i}",(x,y+.4,7.8),(1.0,.65,.28),M["black"],.03,rot=(math.radians(-12),0,0))
     if DETAIL>=2:
         # dense little ID plates / stickers
         for i,x in enumerate(range(-44,45,8)):
@@ -255,8 +293,8 @@ def destroyed_overlays():
 base()
 fence()
 control_building()
-transformer(-20,0,1,DESTROYED)
-transformer(20,0,2,DESTROYED)
+transformer(-23,10,1,DESTROYED)
+transformer(22,-4,2,DESTROYED)
 buswork()
 switchyard()
 towers_and_lines()
