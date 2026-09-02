@@ -1,6 +1,6 @@
 {
   "mode": "script",
   "script": "edm-jobs/build_tpg_station_lod2.py",
-  "output": "TPG_Fuel_and_Luuuube_LOD2.edm",
+  "output": "TPG_Fuel_and_Luuuube_Pro_v110_LOD2.edm",
   "save_blend": false
 }
