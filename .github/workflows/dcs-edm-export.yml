@@ -91,7 +91,7 @@ jobs:
           $out = Join-Path $env:GITHUB_WORKSPACE "edm-artifacts"
           New-Item -ItemType Directory -Force -Path $out | Out-Null
 
-          if ("${{ github.ref_name }}" -eq "tpg-gas-station") {
+          if (("${{ github.ref_name }}" -eq "tpg-gas-station") -or ("${{ github.head_ref }}" -eq "tpg-gas-station")) {
             $jobs = @(
               "edm-jobs/tpg_station_intact.json",
               "edm-jobs/tpg_station_lod1.json",
