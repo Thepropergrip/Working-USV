@@ -205,13 +205,13 @@ def decal_panel(name, text, loc, dims, panel_mat, text_mat, size=.18):
 def add_ground_markings(M):
     # Painted lane/parking markings sit only millimeters above asphalt to avoid z-fighting.
     for x in (-11.0,-7.2,-3.4,0.4,4.2,8.0,11.8):
-        box("PARK_LINE_"+str(x),(x,5.55,.012),(.09,4.2,.022),M["cream"],.0)
-    box("STOP_BAR",(0,2.75,.013),(12.5,.10,.024),M["cream"],.0)
+        box("PARK_LINE_"+str(x),(x,5.55,.062),(.09,4.2,.022),M["cream"],.0)
+    box("STOP_BAR",(0,2.75,.063),(12.5,.10,.024),M["cream"],.0)
     # storm drains with slat geometry
     for x in (-11.8,11.8):
-        box("DRAIN_FRAME_"+str(x),(x,-9.8,.035),(2.0,.75,.055),M["charcoal"],.015)
+        box("DRAIN_FRAME_"+str(x),(x,-9.8,.078),(2.0,.75,.055),M["charcoal"],.015)
         for i in range(8):
-            box("DRAIN_SLAT_"+str(x)+"_"+str(i),(x-0.78+i*.22,-9.8,.067),(.085,.64,.018),M["metal"],.004)
+            box("DRAIN_SLAT_"+str(x)+"_"+str(i),(x-0.78+i*.22,-9.8,.112),(.085,.64,.018),M["metal"],.004)
 
 def build_pump(x,y,idx,M):
     # High-detail modern dispenser. Four physical cabinets, each modeled as real hardware.
@@ -520,7 +520,7 @@ def build_misc(M, detail=True):
 
 def build_destroyed(M):
     # Fire-damaged v1.2 state: preserve the structural collapse but make the burn history unmistakable.
-    box("FORECOURT",(0,0,-.08),(38,28,.16),M["asphalt"],.02)
+    box("FORECOURT",(0,0,.025),(38,28,.05),M["asphalt"],.012)
     box("APRON",(0,-1.0,.02),(27,18,.08),M["damaged_base"],.025)
     add_ground_markings(M)
 
@@ -614,7 +614,7 @@ def build_station(destroyed=False):
         return
 
     # Forecourt and realistic site grounding
-    box("FORECOURT",(0,0,-.08),(38,28,.16),M["asphalt"],.02)
+    box("FORECOURT",(0,0,.025),(38,28,.05),M["asphalt"],.012)
     box("APRON",(0,-1.0,.02),(27.5,18.3,.08),M["concrete"],.025)
     add_ground_markings(M)
     build_storefront(M, detail=True)
