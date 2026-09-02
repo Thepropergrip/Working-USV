@@ -93,7 +93,7 @@ jobs:
 
           $isTpg = ("${{ github.event_name }}" -eq "pull_request" -and "${{ github.head_ref }}" -eq "tpg-gas-station")
           if ($isTpg) {
-            foreach ($job in @("edm-jobs/tpg_station_intact.json","edm-jobs/tpg_station_destroyed.json")) {
+            foreach ($job in @("edm-jobs/tpg_station_intact.json","edm-jobs/tpg_station_lod1.json","edm-jobs/tpg_station_lod2.json","edm-jobs/tpg_station_destroyed.json")) {
               & $env:BLENDER_EXE --background --python "tools/dcs-edm/export_job.py" -- --job "$job" --artifact-dir "$out"
               if ($LASTEXITCODE -ne 0) { throw "TPG station EDM export failed for $job with exit code $LASTEXITCODE" }
             }
