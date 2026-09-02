@@ -13,22 +13,44 @@ from objects_custom_props import get_edm_props
 MAT_DESCS = build_material_descriptions()
 MATS = {}
 
-def texture(name, base, variation=0.035, stripe=False, size=384):
+def texture(name, base, variation=0.035, stripe=False, size=384, splotch=False):
     path = TEXDIR / (name + ".png")
     if path.exists():
         return path
     img = bpy.data.images.new(name, width=size, height=size, alpha=True)
     rng = random.Random(zlib.crc32(name.encode("utf-8")) & 0xffffffff)
     px = []
+    blotches=[]
+    if splotch:
+        # Fixed irregular burn/oil staining for the destroyed concrete apron only.
+        for _ in range(14):
+            blotches.append((
+                rng.uniform(.08,.92), rng.uniform(.08,.92),
+                rng.uniform(.06,.20), rng.uniform(.05,.17),
+                rng.uniform(.52,.86)
+            ))
     for y in range(size):
         for x in range(size):
             n = (rng.random() - 0.5) * variation
             if stripe:
                 n += 0.020 * math.sin(x * 0.22) + 0.012 * math.sin(y * 0.31)
+            dark=0.0
+            if splotch:
+                u=x/max(1,size-1); v=y/max(1,size-1)
+                for cx,cy,rx,ry,intensity in blotches:
+                    dx=(u-cx)/rx; dy=(v-cy)/ry
+                    d=dx*dx+dy*dy
+                    if d < 1.0:
+                        edge=max(0.0,1.0-d)
+                        irregular=.78+.22*math.sin((x+y)*.19+cx*17.0)
+                        dark=max(dark,intensity*edge*edge*irregular)
+                # fine soot freckles around larger stains
+                if rng.random() > .985:
+                    dark=max(dark,rng.uniform(.18,.48))
             px.extend((
-                max(0.0, min(1.0, base[0] + n)),
-                max(0.0, min(1.0, base[1] + n)),
-                max(0.0, min(1.0, base[2] + n)),
+                max(0.0, min(1.0, (base[0] + n) * (1.0-dark))),
+                max(0.0, min(1.0, (base[1] + n) * (1.0-dark))),
+                max(0.0, min(1.0, (base[2] + n) * (1.0-dark))),
                 1.0
             ))
     img.pixels = px
@@ -37,7 +59,7 @@ def texture(name, base, variation=0.035, stripe=False, size=384):
     img.save()
     return path
 
-def edm_mat(name, color, rough=0.7, metal=0.0, variation=0.035, stripe=False):
+def edm_mat(name, color, rough=0.7, metal=0.0, variation=0.035, stripe=False, splotch=False):
     m = bpy.data.materials.new(name)
     m.use_nodes = True
     m.node_tree.nodes.clear()
@@ -45,7 +67,7 @@ def edm_mat(name, color, rough=0.7, metal=0.0, variation=0.035, stripe=False):
     group.post_init(MAT_DESCS["EDM_Default_Material"])
     group.name = "Group"
     tex = m.node_tree.nodes.new("ShaderNodeTexImage")
-    tex.image = bpy.data.images.load(str(texture(name, color, variation, stripe)), check_existing=True)
+    tex.image = bpy.data.images.load(str(texture(name, color, variation, stripe, 384, splotch)), check_existing=True)
     m.node_tree.links.new(tex.outputs["Color"], group.inputs[NodeSocketInDefaultEnum.BASE_COLOR])
 
     rmo_path = TEXDIR / (name + "_RoughMet.png")
@@ -65,28 +87,29 @@ def mats():
     if MATS:
         return MATS
     MATS.update({
-        "asphalt": edm_mat("TPG_GASULTRA120_Asphalt",(0.115,0.122,0.126),0.95,0.0,0.065,True),
-        "concrete": edm_mat("TPG_GASULTRA120_Concrete",(0.49,0.495,0.475),0.90,0.0,0.050,True),
-        "stucco": edm_mat("TPG_GASULTRA120_Stucco",(0.70,0.665,0.585),0.84,0.0,0.038,True),
-        "white": edm_mat("TPG_GASULTRA120_PaintedWhite",(0.79,0.80,0.77),0.58,0.02,0.022),
-        "red": edm_mat("TPG_GASULTRA120_BrandRed",(0.44,0.026,0.020),0.43,0.08,0.020),
-        "charcoal": edm_mat("TPG_GASULTRA120_Charcoal",(0.050,0.055,0.060),0.56,0.04,0.018),
-        "metal": edm_mat("TPG_GASULTRA120_Metal",(0.30,0.315,0.325),0.31,0.74,0.020),
-        "aluminum": edm_mat("TPG_GASULTRA120_Aluminum",(0.49,0.50,0.50),0.28,0.82,0.018),
-        "glass": edm_mat("TPG_GASULTRA120_Glass",(0.050,0.115,0.145),0.18,0.10,0.010),
-        "rubber": edm_mat("TPG_GASULTRA120_Rubber",(0.018,0.020,0.021),0.94,0.0,0.015),
-        "screen": edm_mat("TPG_GASULTRA120_Screen",(0.025,0.055,0.044),0.26,0.05,0.008),
-        "yellow": edm_mat("TPG_GASULTRA120_SafetyYellow",(0.72,0.49,0.035),0.64,0.02,0.025),
-        "blue": edm_mat("TPG_GASULTRA120_StickerBlue",(0.035,0.22,0.42),0.52,0.02,0.015),
-        "green": edm_mat("TPG_GASULTRA120_StickerGreen",(0.045,0.36,0.13),0.56,0.01,0.015),
-        "orange": edm_mat("TPG_GASULTRA120_StickerOrange",(0.82,0.26,0.025),0.55,0.01,0.018),
-        "cream": edm_mat("TPG_GASULTRA120_Cream",(0.88,0.82,0.66),0.66,0.0,0.020),
-        "interior": edm_mat("TPG_GASULTRA120_InteriorDark",(0.075,0.070,0.060),0.78,0.01,0.020),
-        "soot": edm_mat("TPG_GASULTRA120_Soot",(0.018,0.014,0.012),0.96,0.01,0.070,True),
-        "char": edm_mat("TPG_GASULTRA120_Char",(0.045,0.026,0.017),0.92,0.02,0.085,True),
-        "rust": edm_mat("TPG_GASULTRA120_Rust",(0.24,0.075,0.025),0.88,0.05,0.065,True),
-        "cyan": edm_mat("TPG_GASULTRA120_AdCyan",(0.025,0.42,0.56),0.50,0.01,0.012),
-        "purple": edm_mat("TPG_GASULTRA120_AdPurple",(0.31,0.045,0.42),0.52,0.01,0.014),
+        "asphalt": edm_mat("TPG_GASSTATION100_Asphalt",(0.115,0.122,0.126),0.95,0.0,0.065,True),
+        "concrete": edm_mat("TPG_GASSTATION100_Concrete",(0.49,0.495,0.475),0.90,0.0,0.050,True),
+        "damaged_base": edm_mat("TPG_GASSTATION100_DamagedBase",(0.235,0.245,0.245),0.95,0.0,0.045,True,True),
+        "stucco": edm_mat("TPG_GASSTATION100_Stucco",(0.70,0.665,0.585),0.84,0.0,0.038,True),
+        "white": edm_mat("TPG_GASSTATION100_PaintedWhite",(0.79,0.80,0.77),0.58,0.02,0.022),
+        "red": edm_mat("TPG_GASSTATION100_BrandRed",(0.44,0.026,0.020),0.43,0.08,0.020),
+        "charcoal": edm_mat("TPG_GASSTATION100_Charcoal",(0.050,0.055,0.060),0.56,0.04,0.018),
+        "metal": edm_mat("TPG_GASSTATION100_Metal",(0.30,0.315,0.325),0.31,0.74,0.020),
+        "aluminum": edm_mat("TPG_GASSTATION100_Aluminum",(0.49,0.50,0.50),0.28,0.82,0.018),
+        "glass": edm_mat("TPG_GASSTATION100_Glass",(0.050,0.115,0.145),0.18,0.10,0.010),
+        "rubber": edm_mat("TPG_GASSTATION100_Rubber",(0.018,0.020,0.021),0.94,0.0,0.015),
+        "screen": edm_mat("TPG_GASSTATION100_Screen",(0.025,0.055,0.044),0.26,0.05,0.008),
+        "yellow": edm_mat("TPG_GASSTATION100_SafetyYellow",(0.72,0.49,0.035),0.64,0.02,0.025),
+        "blue": edm_mat("TPG_GASSTATION100_StickerBlue",(0.035,0.22,0.42),0.52,0.02,0.015),
+        "green": edm_mat("TPG_GASSTATION100_StickerGreen",(0.045,0.36,0.13),0.56,0.01,0.015),
+        "orange": edm_mat("TPG_GASSTATION100_StickerOrange",(0.82,0.26,0.025),0.55,0.01,0.018),
+        "cream": edm_mat("TPG_GASSTATION100_Cream",(0.88,0.82,0.66),0.66,0.0,0.020),
+        "interior": edm_mat("TPG_GASSTATION100_InteriorDark",(0.075,0.070,0.060),0.78,0.01,0.020),
+        "soot": edm_mat("TPG_GASSTATION100_Soot",(0.018,0.014,0.012),0.96,0.01,0.070,True),
+        "char": edm_mat("TPG_GASSTATION100_Char",(0.045,0.026,0.017),0.92,0.02,0.085,True),
+        "rust": edm_mat("TPG_GASSTATION100_Rust",(0.24,0.075,0.025),0.88,0.05,0.065,True),
+        "cyan": edm_mat("TPG_GASSTATION100_AdCyan",(0.025,0.42,0.56),0.50,0.01,0.012),
+        "purple": edm_mat("TPG_GASSTATION100_AdPurple",(0.31,0.045,0.42),0.52,0.01,0.014),
     })
     return MATS
 
@@ -498,7 +521,7 @@ def build_misc(M, detail=True):
 def build_destroyed(M):
     # Fire-damaged v1.2 state: preserve the structural collapse but make the burn history unmistakable.
     box("FORECOURT",(0,0,-.08),(38,28,.16),M["asphalt"],.02)
-    box("APRON",(0,-1.0,.02),(27,18,.08),M["concrete"],.025)
+    box("APRON",(0,-1.0,.02),(27,18,.08),M["damaged_base"],.025)
     add_ground_markings(M)
 
     # Core ruin is soot-blackened, with brown-char transitions and surviving red/white fragments.
