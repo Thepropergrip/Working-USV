@@ -96,7 +96,8 @@ jobs:
               "edm-jobs/tpg_station_intact.json",
               "edm-jobs/tpg_station_lod1.json",
               "edm-jobs/tpg_station_lod2.json",
-              "edm-jobs/tpg_station_destroyed.json"
+              "edm-jobs/tpg_station_destroyed.json",
+              "edm-jobs/tpg_station_collision.json"
             )
             foreach ($job in $jobs) {
               & $env:BLENDER_EXE --background --python "tools/dcs-edm/export_job.py" -- --job "$job" --artifact-dir "$out"
