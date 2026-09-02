@@ -8,6 +8,20 @@ New-Item -ItemType Directory -Force -Path $shapes,$textures,$db | Out-Null
 
 Copy-Item (Join-Path $root "TPG_Fuel_and_Luuuube.edm") $shapes -Force
 Copy-Item (Join-Path $root "TPG_Fuel_and_Luuuube_Destroyed.edm") $shapes -Force
+Copy-Item (Join-Path $root "TPG_Fuel_and_Luuuube_LOD1.edm") $shapes -Force
+Copy-Item (Join-Path $root "TPG_Fuel_and_Luuuube_LOD2.edm") $shapes -Force
+
+$lods = @'
+model={
+    lods={
+        {"TPG_Fuel_and_Luuuube.edm",1200.0};
+        {"TPG_Fuel_and_Luuuube_LOD1.edm",3500.0};
+        {"TPG_Fuel_and_Luuuube_LOD2.edm",18000.0};
+    };
+    collision_shell="TPG_Fuel_and_Luuuube.edm";
+}
+'@
+Set-Content -Path (Join-Path $shapes "TPG_Fuel_and_Luuuube.lods") -Value $lods -Encoding ASCII
 if (Test-Path (Join-Path $root "Textures")) { Copy-Item (Join-Path $root "Textures\*") $textures -Force }
 
 $entry = @'
@@ -86,6 +100,7 @@ Features:
 - Regular 87 price starts at $3.95/gal
 - convenience store, canopy, HVAC, bollards, bins/wiper stands, price pylon
 - dedicated collision shells
+- three visual LOD levels (LOD0 / LOD1 / LOD2)
 - separate destroyed EDM
 - textured PBR materials generated for DCS EDM export
 - static structure registration; not Fortifications
