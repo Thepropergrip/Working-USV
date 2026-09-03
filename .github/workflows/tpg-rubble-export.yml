@@ -2,6 +2,13 @@ name: TPG Rubble Pile DCS EDM Build
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/tpg-rubble-export.yml"
+      - "tools/dcs-edm/**"
+      - "edm-jobs/tpg_rubble*"
+      - "edm-jobs/build_tpg_rubble*"
+      - "edm-jobs/package_tpg_rubble.ps1"
   push:
     branches:
       - tpg-rubble-pile-v1
