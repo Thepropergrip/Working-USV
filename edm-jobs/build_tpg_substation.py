@@ -24,8 +24,8 @@ bpy.ops.object.delete(use_global=False)
 M=mats()
 
 def base():
-    foundation_bed("FOUNDATION_BED", top_z=FOUNDATION_TOP_Z, bottom_z=-.30,
-                   top_size=(120.0,90.0), bottom_size=(126.0,96.0), mat=M["concrete"])
+    foundation_bed("FOUNDATION_BED", top_z=FOUNDATION_TOP_Z, bottom_z=-.08,
+                   top_size=(120.0,90.0), bottom_size=(132.0,102.0), mat=M["concrete"])
     # Thin cap only: after the global yard lift its top is exactly +0.4572 m.
     # It never shares a plane with DCS terrain, eliminating terrain/gravel z-fighting.
     box("YARD_GRAVEL",(0,0,-GRAVEL_CAP_THICK/2),(120,90,GRAVEL_CAP_THICK),M["gravel"],.0)
