@@ -234,6 +234,16 @@ def mesh_obj(name, verts, faces, material=None, bevel=0.0, coll=False):
     me = bpy.data.meshes.new(name+"_mesh")
     me.from_pydata(verts, [], faces)
     me.update(calc_edges=True)
+
+    # from_pydata() does not create a UV layer. ED's default material exporter
+    # requires one whenever the material has base/RMO textures.
+    uv = me.uv_layers.new(name="UVMap")
+    for loop in me.loops:
+        co = me.vertices[loop.vertex_index].co
+        # Stable object-space planar mapping; enough for these procedural
+        # PBR surfaces and avoids exporter-fatal uv=None.
+        uv.data[loop.index].uv = ((co.x * 0.22) % 1.0, (co.y * 0.35 + co.z * 0.18) % 1.0)
+
     o = bpy.data.objects.new(name, me)
     bpy.context.collection.objects.link(o)
     if material:
