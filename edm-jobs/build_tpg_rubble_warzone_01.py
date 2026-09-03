@@ -546,10 +546,17 @@ def add_collision():
 def batch_visuals():
     # Preserve collision nodes; batch disconnected static meshes by material to keep
     # the high visible detail without exporting hundreds of independent scene nodes.
+    # Apply rotations first so batched objects retain an identity orientation and the
+    # resulting EDM bounds are tight rather than a rotated local AABB around the pile.
+    visuals=[o for o in list(bpy.context.scene.objects) if o.type=="MESH" and not o.name.startswith("COLL_")]
+    for o in visuals:
+        bpy.ops.object.select_all(action="DESELECT")
+        o.select_set(True)
+        bpy.context.view_layer.objects.active=o
+        bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+
     groups={}
-    for o in list(bpy.context.scene.objects):
-        if o.type != "MESH" or o.name.startswith("COLL_"):
-            continue
+    for o in visuals:
         if len(o.data.materials) != 1:
             continue
         key=o.data.materials[0].name if o.data.materials[0] else "None"
@@ -579,8 +586,10 @@ def validate_scene():
     for o in meshes:
         if o.name.startswith("COLL_"):
             continue
-        for c in o.bound_box:
-            pts.append(o.matrix_world @ Vector(c))
+        # Use real vertices, not rotated object bounding-box corners.  This reports the
+        # actual DCS geometry footprint/height even after material batching.
+        for v in o.data.vertices:
+            pts.append(o.matrix_world @ v.co)
     minx=min(p.x for p in pts); maxx=max(p.x for p in pts)
     miny=min(p.y for p in pts); maxy=max(p.y for p in pts)
     minz=min(p.z for p in pts); maxz=max(p.z for p in pts)
