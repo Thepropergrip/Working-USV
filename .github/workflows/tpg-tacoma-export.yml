@@ -6,11 +6,13 @@ on:
       - tpg-tacoma-recon
       - tpg-tacoma-recon-build
       - tpg-tacoma-recon-v2
+      - tpg-tacoma-fbx-v3
     paths:
       - ".github/workflows/tpg-tacoma-export.yml"
       - "edm-jobs/build_tpg_tacoma.py"
       - "edm-jobs/build_tpg_tacoma_*.py"
       - "edm-jobs/tpg_tacoma_*.json"
+      - "edm-jobs/tacoma_fbx_mesh_b64/**"
       - "edm-jobs/package_tpg_tacoma.ps1"
       - "edm-jobs/render_tpg_tacoma_preview.py"
       - "tools/dcs-edm/**"
@@ -22,7 +24,9 @@ on:
       - "edm-jobs/build_tpg_tacoma.py"
       - "edm-jobs/build_tpg_tacoma_*.py"
       - "edm-jobs/tpg_tacoma_*.json"
+      - "edm-jobs/tacoma_fbx_mesh_b64/**"
       - "edm-jobs/package_tpg_tacoma.ps1"
+      - "edm-jobs/render_tpg_tacoma_preview.py"
       - "tools/dcs-edm/**"
   workflow_dispatch:
 
