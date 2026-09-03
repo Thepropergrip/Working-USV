@@ -154,6 +154,8 @@ def sphere(name, loc, radius, material, seg=20, rings=10, parent=None):
     o.name = name
     if material:
         o.data.materials.append(material)
+    for poly in o.data.polygons:
+        poly.use_smooth = True
     if parent:
         o.parent = parent
     return o
@@ -230,7 +232,7 @@ def arch_flare(name, wheel_x, side_y, zc, material):
 
 
 # ----------------------------- V2 geometry helpers -----------------------------
-def mesh_obj(name, verts, faces, material=None, bevel=0.0, coll=False):
+def mesh_obj(name, verts, faces, material=None, bevel=0.0, coll=False, smooth=False):
     me = bpy.data.meshes.new(name+"_mesh")
     me.from_pydata(verts, [], faces)
     me.update(calc_edges=True)
@@ -248,6 +250,9 @@ def mesh_obj(name, verts, faces, material=None, bevel=0.0, coll=False):
     bpy.context.collection.objects.link(o)
     if material:
         me.materials.append(material)
+    if smooth:
+        for poly in me.polygons:
+            poly.use_smooth = True
     if bevel > 0:
         mod=o.modifiers.new("edge_soften","BEVEL")
         mod.width=bevel
@@ -274,7 +279,7 @@ def loft_sections(name, sections, material, bevel=.0):
     faces.append(tuple(range(n-1,-1,-1)))
     off=(len(sections)-1)*n
     faces.append(tuple(off+j for j in range(n)))
-    return mesh_obj(name,verts,faces,material,bevel)
+    return mesh_obj(name,verts,faces,material,bevel,smooth=True)
 
 def prism_x(name,x0,x1,yz,material,bevel=.008):
     n=len(yz)
@@ -371,10 +376,10 @@ def wheel(prefix, x, side):
     if LOD==0:
         for i in range(48):
             a=2*math.pi*i/48
-            rr=.397
+            rr=.388
             tx=x+rr*math.cos(a); tz=z+rr*math.sin(a)
-            yy=y+side*((i%3)-1)*.055
-            lug=box(f"{prefix}_TREAD_{i}",(tx,yy,tz),(.046,.075,.016),M["rubber"],.003,rot=(0,-a,0))
+            yy=y+side*((i%3)-1)*.050
+            lug=box(f"{prefix}_TREAD_{i}",(tx,yy,tz),(.030,.050,.006),M["rubber"],.002,rot=(0,-a,0))
             parent_keep(lug,roll)
     return steer,roll
 
@@ -523,18 +528,32 @@ def add_rack_and_lights():
             x=cx-length*.44+i*(length*.88/max(1,bars-1))
             box(f"RACK_CROSS_{cx}_{i}",(x,0,z+.014),(.038,1.52,.034),M["black_metal"],.007)
 
+    # Black Oak cowl lights: the user's closeups show square four-emitter pods
+    # facing forward with deep rear cooling fins.
     for side in (-1,1):
-        x=1.10; y=side*.86; z=1.52
-        tube(f"DITCH_BRACKET_{side}",[(1.03,side*.77,1.33),(1.10,y,1.43)],.017,M["black_metal"],1)
-        box(f"BLACK_OAK_HOUSING_{side}",(x,y,z),(.15,.18,.16),M["black_metal"],.024)
-        face_y=y+side*.096
-        for dx in (-.032,.032):
-            for dz in (-.032,.032):
-                sphere(f"BLACK_OAK_LED_{side}_{dx}_{dz}",(x+dx,face_y,z+dz),.020,M["headlamp"],12,6)
-        if LOD==0:
-            for i in range(5):
-                box(f"BLACK_OAK_FIN_{side}_{i}",(x-.070+i*.035,y-side*.095,z),(.012,.030,.15),M["black_plastic"],.003)
+        x=1.105; y=side*.865; z=1.515
+        tube(f"DITCH_BRACKET_{side}",[(1.02,side*.78,1.33),(1.09,y,1.42)],.017,M["black_metal"],1)
+        box(f"BLACK_OAK_HOUSING_{side}",(x,y,z),(.165,.180,.165),M["black_metal"],.024)
 
+        face_x=x+.087
+        for dy in (-.034,.034):
+            for dz in (-.034,.034):
+                sphere(f"BLACK_OAK_LED_{side}_{dy}_{dz}",(face_x, y+dy, z+dz),.020,M["headlamp"],12,6)
+
+        # Face bezel around the optic pack.
+        box(f"BLACK_OAK_FACE_{side}",(face_x-.002,y,z),(.010,.154,.142),M["black_metal"],.010)
+        for dy in (-.034,.034):
+            for dz in (-.034,.034):
+                sphere(f"BLACK_OAK_LED_FACE_{side}_{dy}_{dz}",(face_x+.006,y+dy,z+dz),.019,M["headlamp"],12,6)
+
+        if LOD==0:
+            # Rear cooling fins, matching the photographed finned housing.
+            for i in range(6):
+                fx=x-.092-i*.014
+                box(f"BLACK_OAK_FIN_{side}_{i}",(fx,y,z),(.010,.188,.155),M["black_plastic"],.002)
+            text_obj("BLACK OAK",f"BLACK_OAK_LABEL_{side}",
+                (face_x+.013,y,z+.068),.021,M["white"],
+                rot=(0,math.radians(90),math.radians(90)))
 
 def add_rear():
     paint=M["burnt"] if DESTROYED else M["paint"]
@@ -562,8 +581,9 @@ def add_badges_plate_weather():
     for side in (-1,1):
         rot=(-math.pi/2,0,0) if side>0 else (math.pi/2,0,0)
         text_obj("TACOMA",f"SIDE_TACOMA_{side}",(.48,side*.946,1.02),.090,M["black_plastic"],rot=rot)
-        text_obj("TRD 4X4",f"TRD_BADGE_{side}",(-2.03,side*.946,1.28),.085,M["black_plastic"],rot=rot)
-        text_obj("OFF ROAD",f"TRD_OFFROAD_{side}",(-2.03,side*.946,1.215),.040,M["red"],rot=rot)
+        text_obj("TRD",f"TRD_BADGE_{side}",(-2.10,side*.946,1.28),.090,M["black_plastic"],rot=rot)
+        text_obj("4X4",f"TRD_4X4_{side}",(-1.96,side*.947,1.28),.062,M["red"],rot=rot)
+        text_obj("OFF ROAD",f"TRD_OFFROAD_{side}",(-2.03,side*.946,1.215),.040,M["black_plastic"],rot=rot)
 
     box("DCS_PLATE_FRONT",(2.915,0,.52),(.018,.305,.155),M["white"],.009)
     text_obj("DCS 4X4","DCS_PLATE_FRONT_TEXT",(2.928,0,.52),.055,M["blue"],
