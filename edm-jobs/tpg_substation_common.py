@@ -138,6 +138,35 @@ def text_obj(text,name,loc,size,mat,rot=(math.radians(90),0,0),extrude=.0,align=
     bpy.context.object.name=name
     return bpy.context.object
 
+def sign_plate(name,center,width,height,plate_mat,text,text_mat,M,text_size=.16,depth=.006,
+               rot=(math.radians(90),0,0),subtext=None,subtext_mat=None,subtext_size=.10):
+    # Industrial signage is a real thin plate with completely flat decal-style graphics.
+    # Lettering has no extrusion/bevel and rides only 1.5 mm above the sign face.
+    x,y,z=center
+    box(name+"_PLATE",(x,y,z),(width,depth,height),plate_mat,0.0)
+    face_y=y-depth/2-.0015
+    text_z=z + (.10*height if subtext else 0.0)
+    text_obj(text,name+"_TEXT",(x,face_y,text_z),text_size,text_mat,rot=rot)
+    if subtext:
+        text_obj(subtext,name+"_SUBTEXT",(x,face_y,z-.22*height),subtext_size,
+                 subtext_mat or M["black"],rot=rot)
+    return name
+
+def danger_sign(name,center,M,width=1.60,height=.82):
+    # Familiar utility warning placard: white field, red DANGER header, black hazard line.
+    x,y,z=center
+    sign_plate(name,(x,y,z),width,height,M["white"],"DANGER",M["white"],M,
+               text_size=.17,depth=.006,subtext="HIGH VOLTAGE",
+               subtext_mat=M["black"],subtext_size=.11)
+    # Flat red header band behind DANGER lettering.
+    box(name+"_HEADER",(x,y-.004,z+.18*height),(width*.94,.0025,height*.30),M["red"],0.0)
+    # Re-apply header text above the red band as a white flat decal.
+    text_obj("DANGER",name+"_HEADER_TEXT",(x,y-.006,z+.18*height),.17,M["white"])
+    return name
+
+def equipment_label(name,center,M,text,width=1.10,height=.38,text_size=.13,plate="white",ink="black"):
+    return sign_plate(name,center,width,height,M[plate],text,M[ink],M,text_size=text_size,depth=.005)
+
 def foundation_bed(name,top_z=.3972,bottom_z=-.30,top_size=(120.0,90.0),bottom_size=(126.0,96.0),mat=None):
     # Closed, single-piece tapered foundation.  The sloped faces disappear into terrain,
     # while the raised top keeps DCS terrain/rocks well below the visible yard surface.
