@@ -167,24 +167,92 @@ def danger_sign(name,center,M,width=1.60,height=.82):
 def equipment_label(name,center,M,text,width=1.10,height=.38,text_size=.13,plate="white",ink="black"):
     return sign_plate(name,center,width,height,M[plate],text,M[ink],M,text_size=text_size,depth=.005)
 
-def foundation_bed(name,top_z=.3972,bottom_z=-.30,top_size=(120.0,90.0),bottom_size=(126.0,96.0),mat=None):
-    # Closed, single-piece tapered foundation.  The sloped faces disappear into terrain,
-    # while the raised top keeps DCS terrain/rocks well below the visible yard surface.
-    tx,ty=top_size[0]/2,top_size[1]/2
-    bx,by=bottom_size[0]/2,bottom_size[1]/2
-    verts=[
-        (-bx,-by,bottom_z),(bx,-by,bottom_z),(bx,by,bottom_z),(-bx,by,bottom_z),
-        (-tx,-ty,top_z),(tx,-ty,top_z),(tx,ty,top_z),(-tx,ty,top_z),
+def _rounded_rect_ring(width,depth,radius,segments=8):
+    # Counter-clockwise perimeter, starting near the lower-right corner.
+    hw=width/2.0; hd=depth/2.0
+    r=max(0.0,min(radius,hw-.001,hd-.001))
+    pts=[]
+    corners=[
+        ( hw-r,-hd+r,-math.pi/2,0.0),
+        ( hw-r, hd-r,0.0,math.pi/2),
+        (-hw+r, hd-r,math.pi/2,math.pi),
+        (-hw+r,-hd+r,math.pi,3*math.pi/2),
     ]
-    faces=[(0,1,2,3),(4,7,6,5),(0,4,5,1),(1,5,6,2),(2,6,7,3),(3,7,4,0)]
-    mesh=bpy.data.meshes.new(name+"_mesh"); mesh.from_pydata(verts,[],faces); mesh.update()
+    for cx,cy,a0,a1 in corners:
+        for j in range(segments):
+            t=j/(segments-1) if segments>1 else 0.0
+            a=a0+(a1-a0)*t
+            p=(cx+r*math.cos(a),cy+r*math.sin(a))
+            if not pts or (abs(p[0]-pts[-1][0])+abs(p[1]-pts[-1][1])>1e-6):
+                pts.append(p)
+    return pts
+
+def foundation_bed(name,top_z=.3972,bottom_z=-.18,top_size=(120.0,90.0),bottom_size=(132.0,102.0),mat=None):
+    # A true terrain-contact berm, not a floating slab.
+    #
+    # The top ring meets the underside of the raised yard.  A broad, continuous
+    # sloped shoulder runs outward to a toe slightly below the DCS placement
+    # plane, then a buried vertical skirt continues farther down.  The visible
+    # slope therefore always intersects terrain instead of leaving daylight
+    # beneath the yard. Rounded corners and quad strips avoid radial/triangle
+    # lines across the berm.
+    top_w,top_d=top_size
+    bot_w,bot_d=bottom_size
+    top_r=2.25
+    toe_r=6.0
+    seg=10
+    top2=_rounded_rect_ring(top_w,top_d,top_r,seg)
+    toe2=_rounded_rect_ring(bot_w,bot_d,toe_r,seg)
+    if len(top2)!=len(toe2):
+        raise RuntimeError("foundation ring topology mismatch")
+    n=len(top2)
+    toe_z=min(-0.08,bottom_z)
+    skirt_z=min(-0.55,bottom_z-.30)
+
+    verts=[]
+    for x,y in top2: verts.append((x,y,top_z))
+    for x,y in toe2: verts.append((x,y,toe_z))
+    for x,y in toe2: verts.append((x,y,skirt_z))
+
+    faces=[]
+    # Sloped shoulder.
+    for i in range(n):
+        j=(i+1)%n
+        faces.append((i,j,n+j,n+i))
+    # Buried vertical skirt: prevents visible gaps on locally uneven DCS terrain.
+    for i in range(n):
+        j=(i+1)%n
+        faces.append((n+i,n+j,2*n+j,2*n+i))
+    # Bottom closure only; no top face, so there is no hidden coplanar surface
+    # directly beneath the gravel cap.
+    faces.append(tuple(range(3*n-1,2*n-1,-1)))
+
+    mesh=bpy.data.meshes.new(name+"_mesh")
+    mesh.from_pydata(verts,[],faces); mesh.update()
+
+    # UV: U follows perimeter, V follows elevation, keeping the shoulder visually continuous.
     uv=mesh.uv_layers.new(name="UVMap")
-    # Simple per-face planar UVs are sufficient for the procedural concrete material and
-    # satisfy the ED exporter UV requirement.
+    lengths=[0.0]
+    total=0.0
+    for i in range(n):
+        j=(i+1)%n
+        x0,y0=top2[i]; x1,y1=top2[j]
+        total += math.hypot(x1-x0,y1-y0)
+        lengths.append(total)
+    total=max(total,1e-6)
+    ring_u=[lengths[i]/total for i in range(n)]
     for poly in mesh.polygons:
-        coords=((0,0),(1,0),(1,1),(0,1))
-        for k,li in enumerate(poly.loop_indices):
-            uv.data[li].uv=coords[k % 4]
+        for li in poly.loop_indices:
+            vi=mesh.loops[li].vertex_index
+            ring=vi//n
+            idx=vi%n
+            u=ring_u[idx]
+            v=1.0 if ring==0 else (0.25 if ring==1 else 0.0)
+            uv.data[li].uv=(u,v)
+        # Smooth the berm shoulder/corners, while the buried skirt is irrelevant visually.
+        if poly.index < n:
+            poly.use_smooth=True
+
     o=bpy.data.objects.new(name,mesh); bpy.context.collection.objects.link(o)
     if mat: o.data.materials.append(mat)
     return o
@@ -205,65 +273,130 @@ def bolt_ring(prefix,center,radius,z,count,mat,bolt_r=.035,bolt_h=.045):
             bolt_r,bolt_h,mat,8)
 
 def insulator_stack(name,loc,height,M,detail=2,brown=False):
-    # One revolved mesh per insulator stack instead of dozens of child objects.
-    # Keeps real skirt silhouette at close range while dramatically reducing EDM scene-node count.
+    # Reference-driven porcelain station/bushing insulator.
+    # Broad umbrella sheds grow from a continuous ceramic trunk, with realistic
+    # galvanized end caps/flanges. This intentionally avoids the old bead-like
+    # sequence of rounded rings.
     mat=M["brown_porcelain"] if brown else M["porcelain"]
-    discs=10 if detail>=2 else (6 if detail==1 else 3)
-    seg=16 if detail>=2 else (12 if detail==1 else 8)
-    z0=loc[2]-height/2
-    step=height/discs
+
+    if brown:
+        core_r=.115
+        shed_r=.305 if height>=2.6 else .275
+        full_sheds=max(5,min(10,int(round(height/.40))))
+    else:
+        core_r=.090 if height>=2.8 else .105
+        shed_r=.255 if height>=2.8 else .235
+        full_sheds=max(6,min(13,int(round(height/.29))))
+
+    if detail>=2:
+        sheds=full_sheds
+        seg=24
+    elif detail==1:
+        sheds=max(5,int(round(full_sheds*.72)))
+        seg=16
+    else:
+        sheds=max(3,int(round(full_sheds*.46)))
+        seg=10
+
+    cap_h=min(.16,max(.10,height*.045))
+    z_bottom=loc[2]-height/2
+    z_top=loc[2]+height/2
+    ceramic_bottom=z_bottom+cap_h
+    ceramic_top=z_top-cap_h
+    ceramic_h=max(.25,ceramic_top-ceramic_bottom)
+    step=ceramic_h/sheds
+
     profile=[]
-    for i in range(discs):
-        base=z0+i*step
-        # stacked shed profile: narrow neck -> shoulder -> wide porcelain skirt -> underside -> neck
+    # Bottom ceramic collar.
+    profile.extend([
+        (ceramic_bottom,core_r*1.24),
+        (ceramic_bottom+step*.10,core_r*1.18),
+        (ceramic_bottom+step*.15,core_r),
+    ])
+
+    for i in range(sheds):
+        base=ceramic_bottom+i*step
+        # Real porcelain weather shed: narrow trunk, sloping upper bell,
+        # broad thin umbrella lip, then a sharper underside return.
+        alt=1.0 if (brown or i%2==0) else .92
+        sr=shed_r*alt
         profile.extend([
-            (base+.02*step,.070),
-            (base+.16*step,.085),
-            (base+.32*step,.145),
-            (base+.47*step,.175 if detail>=2 else .155),
-            (base+.58*step,.130),
-            (base+.72*step,.085),
-            (base+.96*step,.070),
+            (base+step*.16,core_r),
+            (base+step*.23,core_r*1.10),
+            (base+step*.31,sr*.58),
+            (base+step*.39,sr*.90),
+            (base+step*.44,sr),
+            (base+step*.49,sr*.98),
+            (base+step*.55,sr*.67),
+            (base+step*.61,core_r*1.22),
+            (base+step*.72,core_r),
+            (base+step*.92,core_r),
         ])
+
+    # Top ceramic collar.
+    profile.extend([
+        (ceramic_top-step*.08,core_r),
+        (ceramic_top-step*.03,core_r*1.16),
+        (ceramic_top,core_r*1.24),
+    ])
+
+    # Remove any accidental non-monotonic Z duplicates introduced where sections meet.
+    clean=[]
+    last_z=-1e30
+    for z,r in profile:
+        z=max(z,last_z+1e-5)
+        clean.append((z,r))
+        last_z=z
+    profile=clean
+
     verts=[]
     for z,r in profile:
         for j in range(seg):
-            ang=2*math.pi*j/seg
-            verts.append((loc[0]+r*math.cos(ang),loc[1]+r*math.sin(ang),z))
+            a=2*math.pi*j/seg
+            verts.append((loc[0]+r*math.cos(a),loc[1]+r*math.sin(a),z))
     faces=[]
     rings=len(profile)
     for ri in range(rings-1):
         for j in range(seg):
-            n=(j+1)%seg
-            a0=ri*seg+j; a1=ri*seg+n
-            b0=(ri+1)*seg+j; b1=(ri+1)*seg+n
-            faces.append((a0,a1,b1,b0))
-    # close the ends
+            nj=(j+1)%seg
+            faces.append((ri*seg+j,ri*seg+nj,(ri+1)*seg+nj,(ri+1)*seg+j))
+
+    # Ceramic end caps close the lathed porcelain body.
     verts.append((loc[0],loc[1],profile[0][0])); bot=len(verts)-1
     verts.append((loc[0],loc[1],profile[-1][0])); top=len(verts)-1
     for j in range(seg):
-        n=(j+1)%seg
-        faces.append((bot,n,j))
-        a0=(rings-1)*seg+j; a1=(rings-1)*seg+n
-        faces.append((top,a0,a1))
+        nj=(j+1)%seg
+        faces.append((bot,j,nj))
+        a0=(rings-1)*seg+j; a1=(rings-1)*seg+nj
+        faces.append((top,a1,a0))
+
     mesh=bpy.data.meshes.new(name+"_mesh")
     mesh.from_pydata(verts,[],faces); mesh.update()
-    # ED default material export requires a UV layer. Map U around the revolved circumference,
-    # V along stack height so porcelain/grime textures remain stable and continuous.
+
     uv=mesh.uv_layers.new(name="UVMap")
-    zmin=profile[0][0]; zmax=profile[-1][0]; zr=max(0.001,zmax-zmin)
+    zmin=profile[0][0]; zmax=profile[-1][0]; zr=max(.001,zmax-zmin)
     for poly in mesh.polygons:
         for li in poly.loop_indices:
             vi=mesh.loops[li].vertex_index
             vx,vy,vz=mesh.vertices[vi].co
             dx=vx-loc[0]; dy=vy-loc[1]
-            u=(math.atan2(dy,dx)/(2*math.pi))%1.0 if abs(dx)+abs(dy)>1e-8 else 0.5
+            u=(math.atan2(dy,dx)/(2*math.pi))%1.0 if abs(dx)+abs(dy)>1e-8 else .5
             v=max(0.0,min(1.0,(vz-zmin)/zr))
             uv.data[li].uv=(u,v)
+        poly.use_smooth=True
+
     o=bpy.data.objects.new(name,mesh); bpy.context.collection.objects.link(o)
     o.data.materials.append(mat)
-    # continuous galvanized/copper core rod remains a separate simple object
-    cyl(name+"_rod",loc,.033,height+.12,M["steel"],8 if detail<2 else 12)
+
+    # Cast/galvanized mounting hardware like real station-post and transformer bushings.
+    flange_r=max(core_r*1.75,shed_r*.56)
+    neck_r=core_r*1.28
+    verts_hw=20 if detail>=2 else (14 if detail==1 else 10)
+    cyl(name+"_BASE_FLANGE",(loc[0],loc[1],z_bottom+cap_h*.28),flange_r,cap_h*.34,M["galv"],verts_hw)
+    cyl(name+"_BASE_NECK",(loc[0],loc[1],z_bottom+cap_h*.66),neck_r,cap_h*.78,M["galv"],verts_hw)
+    cyl(name+"_TOP_NECK",(loc[0],loc[1],z_top-cap_h*.66),neck_r,cap_h*.78,M["galv"],verts_hw)
+    cyl(name+"_TOP_CAP",(loc[0],loc[1],z_top-cap_h*.23),max(core_r*1.55,shed_r*.48),cap_h*.38,M["galv"],verts_hw)
+
     return o
 
 def lattice_post(name,x,y,z0,h,M,detail=2,width=.72):
