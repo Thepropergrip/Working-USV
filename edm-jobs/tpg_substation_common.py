@@ -126,14 +126,39 @@ def torus(name,loc,major,minor,mat,rot=(0,0,0),major_segments=20,minor_segments=
     if mat:o.data.materials.append(mat)
     return o
 
-def text_obj(text,name,loc,size,mat,rot=(math.radians(90),0,0),extrude=.008,align="CENTER"):
+def text_obj(text,name,loc,size,mat,rot=(math.radians(90),0,0),extrude=.0,align="CENTER"):
+    # Sign/label lettering is intentionally decal-flat: zero extrusion and zero bevel.
+    # A tiny caller-controlled surface offset prevents z-fighting without making letters
+    # appear as floating 3D signage.
     c=bpy.data.curves.new(name+"_curve","FONT"); c.body=text; c.align_x=align; c.align_y="CENTER"
-    c.size=size; c.extrude=extrude; c.bevel_depth=.002; c.bevel_resolution=1
+    c.size=size; c.extrude=0.0; c.bevel_depth=0.0; c.bevel_resolution=0
     o=bpy.data.objects.new(name,c); bpy.context.collection.objects.link(o)
     o.location=loc; o.rotation_euler=rot; o.data.materials.append(mat)
     bpy.context.view_layer.objects.active=o; o.select_set(True); bpy.ops.object.convert(target="MESH")
     bpy.context.object.name=name
     return bpy.context.object
+
+def foundation_bed(name,top_z=.3972,bottom_z=-.30,top_size=(120.0,90.0),bottom_size=(126.0,96.0),mat=None):
+    # Closed, single-piece tapered foundation.  The sloped faces disappear into terrain,
+    # while the raised top keeps DCS terrain/rocks well below the visible yard surface.
+    tx,ty=top_size[0]/2,top_size[1]/2
+    bx,by=bottom_size[0]/2,bottom_size[1]/2
+    verts=[
+        (-bx,-by,bottom_z),(bx,-by,bottom_z),(bx,by,bottom_z),(-bx,by,bottom_z),
+        (-tx,-ty,top_z),(tx,-ty,top_z),(tx,ty,top_z),(-tx,ty,top_z),
+    ]
+    faces=[(0,1,2,3),(4,7,6,5),(0,4,5,1),(1,5,6,2),(2,6,7,3),(3,7,4,0)]
+    mesh=bpy.data.meshes.new(name+"_mesh"); mesh.from_pydata(verts,[],faces); mesh.update()
+    uv=mesh.uv_layers.new(name="UVMap")
+    # Simple per-face planar UVs are sufficient for the procedural concrete material and
+    # satisfy the ED exporter UV requirement.
+    for poly in mesh.polygons:
+        coords=((0,0),(1,0),(1,1),(0,1))
+        for k,li in enumerate(poly.loop_indices):
+            uv.data[li].uv=coords[k % 4]
+    o=bpy.data.objects.new(name,mesh); bpy.context.collection.objects.link(o)
+    if mat: o.data.materials.append(mat)
+    return o
 
 def cable(name,pts,mat,radius=.022,res=1):
     c=bpy.data.curves.new(name+"_curve","CURVE"); c.dimensions="3D"; c.bevel_depth=radius; c.bevel_resolution=res
