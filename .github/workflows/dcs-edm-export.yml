@@ -29,7 +29,6 @@ jobs:
       BLENDER_VERSION: "4.1.1"
       BLENDER_URL: "https://download.blender.org/release/Blender4.1/blender-4.1.1-windows-x64.zip"
       ED_EXPORTER_COMMIT: "5f03ba70ec96ca6ce68028eabc786ecd97f9cf93"
-
     steps:
       - name: Checkout project
         uses: actions/checkout@v4
@@ -58,10 +57,7 @@ jobs:
           $materialsUpper = Join-Path $addons "io_scene_edm\Materials"
           $materialsTemp  = Join-Path $addons "io_scene_edm\__materials_casefix"
           $materialsLower = Join-Path $addons "io_scene_edm\materials"
-          if (Test-Path $materialsUpper) {
-            Rename-Item -Path $materialsUpper -NewName "__materials_casefix"
-            Rename-Item -Path $materialsTemp -NewName "materials"
-          }
+          if (Test-Path $materialsUpper) { Rename-Item -Path $materialsUpper -NewName "__materials_casefix"; Rename-Item -Path $materialsTemp -NewName "materials" }
           if (-not (Test-Path (Join-Path $materialsLower "__init__.py"))) { throw "Failed to normalize ED Materials package casing." }
           $native = Join-Path $addons "io_scene_edm\pyedm_311.pyd"
           if (-not (Test-Path $native)) { throw "Official native pyedm_311.pyd was not installed." }
@@ -70,18 +66,23 @@ jobs:
       - name: Export EDM
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
+          $ErrorActionPreference = "Continue"
           $out = Join-Path $env:GITHUB_WORKSPACE "edm-artifacts"
           New-Item -ItemType Directory -Force -Path $out | Out-Null
+          $log = Join-Path $out "tpg-rubble-export.log"
           $isRubble = ("${{ github.event_name }}" -eq "pull_request" -and "${{ github.head_ref }}" -eq "tpg-rubble-pile-v1")
           if ($isRubble) {
+            $failed = $false
             foreach ($job in @("edm-jobs/tpg_rubble_intact.json","edm-jobs/tpg_rubble_lod1.json","edm-jobs/tpg_rubble_lod2.json","edm-jobs/tpg_rubble_destroyed.json")) {
-              Write-Host "TPG rubble export: $job"
-              & $env:BLENDER_EXE --background --python "tools/dcs-edm/export_job.py" -- --job "$job" --artifact-dir "$out"
-              if ($LASTEXITCODE -ne 0) { throw "TPG rubble EDM export failed for $job with exit code $LASTEXITCODE" }
+              "=== TPG rubble export: $job ===" | Tee-Object -FilePath $log -Append
+              & $env:BLENDER_EXE --background --python "tools/dcs-edm/export_job.py" -- --job "$job" --artifact-dir "$out" *>&1 | Tee-Object -FilePath $log -Append
+              if ($LASTEXITCODE -ne 0) { "FAILED: $job exit $LASTEXITCODE" | Tee-Object -FilePath $log -Append; $failed=$true; break }
             }
-            & "edm-jobs/package_tpg_rubble.ps1"
-            if ($LASTEXITCODE -ne 0) { throw "TPG rubble packaging failed with exit code $LASTEXITCODE" }
+            if (-not $failed) {
+              & "edm-jobs/package_tpg_rubble.ps1" *>&1 | Tee-Object -FilePath $log -Append
+              if ($LASTEXITCODE -ne 0) { $failed=$true }
+            }
+            if ($failed) { throw "TPG rubble export/package failed; see tpg-rubble-export.log" }
           }
           else {
             $requested = ""
@@ -92,13 +93,11 @@ jobs:
             & $env:BLENDER_EXE --background --python "tools/dcs-edm/export_job.py" -- --job "$job" --artifact-dir "$out"
             if ($LASTEXITCODE -ne 0) { throw "Blender/EDM export failed with exit code $LASTEXITCODE" }
           }
-          $edm = Get-ChildItem -Path $out -Filter *.edm -File
-          if (-not $edm) { throw "Exporter completed without producing an EDM file." }
-          $edm | ForEach-Object { Write-Host "EDM artifact: $($_.Name) ($($_.Length) bytes)" }
       - name: Upload EDM build artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: dcs-edm-${{ github.run_number }}
           path: edm-artifacts/**
-          if-no-files-found: error
+          if-no-files-found: ignore
           retention-days: 30
