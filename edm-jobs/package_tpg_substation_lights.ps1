@@ -40,9 +40,9 @@ declare_plugin("TPG Electrical Substation V1.0 LIGHTS",
     installed = true,
     dirName = current_mod_path,
     displayName = _("TPG Electrical Substation V1.0 LIGHTS"),
-    version = "1.0.0-LIGHTS",
+    version = "1.0.1-LIGHTS",
     state = "installed",
-    info = _("High-detail electrical substation static structure with working yard lights")
+    info = _("High-detail electrical substation static structure with DCS-managed yard lighting")
 })
 mount_vfs_model_path(current_mod_path.."/Shapes")
 mount_vfs_texture_path(current_mod_path.."/Textures")
@@ -52,66 +52,94 @@ plugin_done()
 Set-Content -Path (Join-Path $pkg "entry.lua") -Value $entry -Encoding UTF8
 
 $dbLua = @'
-local function add_structure(f)
-    f.shape_table_data = {
-        {
-            file = f.ShapeName,
-            life = f.Life,
-            username = f.Name,
-            desrt = f.ShapeNameDestr or "self",
-            classname = "lLandVehicle",
-            positioning = "BYNORMAL",
-        }
+local GT = {}
+set_recursive_metatable(GT, GT_t.generic_stationary)
+set_recursive_metatable(GT.chassis, GT_t.CH_t.STATIC)
+
+GT.chassis.life = 1200
+GT.visual.shape = "TPG_Electrical_Substation_V1_LIGHTS"
+GT.visual.shape_dstr = "TPG_Electrical_Substation_V1_LIGHTS_Destroyed"
+GT.visual.fire_size = 0.8
+GT.visual.fire_pos = {0, 0, 0}
+GT.visual.fire_time = 120
+GT.time_agony = 180
+
+GT.Name = "TPG_Electrical_Substation_V1_LIGHTS"
+GT.DisplayName = _("TPG Electrical Substation V1.0 LIGHTS")
+GT.Rate = 100
+GT.DetectionRange = 0
+GT.ThreatRange = 0
+GT.mapclasskey = "P0091000076"
+GT.attribute = {wsType_Static, wsType_Standing, "Structures"}
+GT.category = "Structures"
+GT.positioning = "BYNORMAL"
+
+GT.shape_table_data = {
+    {
+        file = "TPG_Electrical_Substation_V1_LIGHTS",
+        life = 1200,
+        username = "TPG_Electrical_Substation_V1_LIGHTS",
+        desrt = "TPG_Electrical_Substation_V1_LIGHTS_Destroyed",
+        classname = "lLandVehicle",
+        positioning = "BYNORMAL",
+    },
+    {
+        name = "TPG_Electrical_Substation_V1_LIGHTS_Destroyed",
+        file = "TPG_Electrical_Substation_V1_LIGHTS_Destroyed",
     }
+}
 
-    if f.ShapeNameDestr then
-        f.shape_table_data[#f.shape_table_data + 1] = {
-            name = f.ShapeNameDestr,
-            file = f.ShapeNameDestr,
-        }
-    end
-
-    f.mapclasskey = "P0091000076"
-    f.attribute = {wsType_Static, wsType_Standing, "Structures"}
-    add_surface_unit(f)
+-- DCS-managed yard lighting.  The previous LIGHTS build relied only on embedded
+-- EDM Blender lights; those can appear in ModelViewer but be ignored by DCS for
+-- static/ground objects.  These spotlights are created by the DCS light system and
+-- anchored to named EDM CONNECTORs exported at the nine existing yard fixtures.
+local yard_lights = {}
+for i = 0, 8 do
+    yard_lights[#yard_lights + 1] = {
+        typename = "spotlight",
+        connector = "TPG_YARD_SPOT_" .. i,
+        color = {1.0, 0.82, 0.58},
+        intensity_max = 7.5,
+        angle_max = math.rad(36),
+        dont_change_color = true,
+        angle_change_rate = 0,
+    }
 end
 
-add_structure({
-    Name = "TPG_Electrical_Substation_V1_LIGHTS",
-    DisplayName = _("TPG Electrical Substation V1.0 LIGHTS"),
-    ShapeName = "TPG_Electrical_Substation_V1_LIGHTS",
-    ShapeNameDestr = "TPG_Electrical_Substation_V1_LIGHTS_Destroyed",
-    Life = 1200,
-    Rate = 100,
-    category = "Structures",
-    SeaObject = false,
-    isPutToWater = false,
-    numParking = 0,
-})
+GT.lights = {
+    [1] = {
+        typename = "collection",
+        lights = yard_lights,
+    },
+}
+
+add_surface_unit(GT)
+GT = nil
 '@
 Set-Content -Path (Join-Path $db "db_tpg_electrical_substation_lights.lua") -Value $dbLua -Encoding UTF8
 
 $readme = @'
-TPG Electrical Substation V1.0 LIGHTS
-=====================================
+TPG Electrical Substation V1.0 LIGHTS v1.0.1
+=============================================
 
 Install:
 Copy the folder "TPG_Electrical_Substation_V1_LIGHTS" into:
   Saved Games\DCS\Mods\tech\
 
-This version is intentionally a separate coexisting static asset from:
+This version coexists with:
   TPG_Electrical_Substation_V1
 
 Mission Editor:
 Static Objects -> Structures -> TPG Electrical Substation V1.0 LIGHTS
 
-LIGHTS edition:
+LIGHTS v1.0.1 repair:
 - Same high-fidelity substation geometry/layout
-- Existing nine yard/streetlight fixtures receive real EDM spot-light nodes
-- Warm-white localized illumination aimed inward across the yard
-- Destroyed model contains no live light sources
-- Separate shape/database/plugin names allow both versions to remain installed
-- Multiple LODs and dedicated destroyed shape retained
+- Nine existing yard fixtures now export named EDM connectors
+- Lua GT.lights block asks the DCS ground/static light system to create nine spotlights
+- Warm self-illuminated EDM lamp lenses provide visible fixture glow
+- Embedded EDM spot lights retained as a secondary fallback
+- Destroyed model has no active connector/spot lights
+- Separate shape/database/plugin names preserve coexistence with the non-LIGHTS asset
 '@
 Set-Content -Path (Join-Path $pkg "README.txt") -Value $readme -Encoding UTF8
 
