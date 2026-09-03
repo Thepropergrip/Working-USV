@@ -25,7 +25,7 @@ TIRE_W = 0.285
 FRONT_AXLE = WHEELBASE / 2.0
 REAR_AXLE = -WHEELBASE / 2.0
 
-def _tex(name, base, rough=.7, metal=0.0, size=256, dirt=0.0):
+def _tex(name, base, rough=.7, metal=0.0, size=512, dirt=0.0):
     path = TEXDIR / (name + ".png")
     if path.exists():
         return path
@@ -35,7 +35,7 @@ def _tex(name, base, rough=.7, metal=0.0, size=256, dirt=0.0):
     for y in range(size):
         v = y / max(1, size - 1)
         for x in range(size):
-            n = (rng.random() - .5) * .035
+            n = (rng.random() - .5) * .014
             d = 0.0
             if dirt:
                 # Fine dry-road speckle and subtle lower-value dirt variation.
@@ -80,7 +80,7 @@ def materials():
     if M:
         return M
     M.update({
-        "paint": mat("TPG_TACOMA_Quicksand_4T8", (.59,.53,.42), .46, .05, .07),
+        "paint": mat("TPG_TACOMA_Quicksand_4T8", (.585,.525,.414), .42, .045, .025),
         "paint_clean": mat("TPG_TACOMA_QuicksandClean", (.61,.55,.44), .42, .05, .018),
         "black_plastic": mat("TPG_TACOMA_BlackPlastic", (.028,.030,.030), .84, .02, .025),
         "black_metal": mat("TPG_TACOMA_BlackMetal", (.020,.022,.023), .48, .72, .018),
@@ -147,7 +147,8 @@ def torus(name, loc, major, minor, material, rot=(0,0,0), parent=None, major_seg
         o.parent = parent
     return o
 
-def sphere(name, loc, radius, material, parent=None, seg=20, rings=10):
+
+def sphere(name, loc, radius, material, seg=20, rings=10, parent=None):
     bpy.ops.mesh.primitive_uv_sphere_add(segments=seg, ring_count=rings, radius=radius, location=loc)
     o = bpy.context.object
     o.name = name
@@ -156,7 +157,6 @@ def sphere(name, loc, radius, material, parent=None, seg=20, rings=10):
     if parent:
         o.parent = parent
     return o
-
 
 def tube(name, pts, radius, material, bevel_res=2):
     c = bpy.data.curves.new(name+"_curve","CURVE")
@@ -275,6 +275,8 @@ def prism_x(name,x0,x1,yz,material,bevel=.008):
     return mesh_obj(name,verts,faces,material,bevel)
 
 def prism_y(name,y0,y1,xz,material,bevel=.006):
+    if y1 < y0:
+        y0, y1 = y1, y0
     n=len(xz)
     verts=[(x,y0,z) for x,z in xz]+[(x,y1,z) for x,z in xz]
     faces=[tuple(range(n-1,-1,-1)),tuple(n+i for i in range(n))]
