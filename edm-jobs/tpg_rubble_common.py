@@ -1,6 +1,6 @@
 import bpy, math, os, random, zlib
 from pathlib import Path
-from mathutils import Vector
+from mathutils import Vector, Euler
 
 WORK = Path(os.environ.get("GITHUB_WORKSPACE", os.getcwd())).resolve()
 TEXDIR = WORK / "edm-artifacts" / "Textures"
@@ -138,8 +138,12 @@ def rebar(name,start,end,mat,r=.025):
 def broken_pipe(name,loc,length,radius,mat,rng):
     rot=(rng.uniform(-1.0,1.0),rng.uniform(-1.0,1.0),rng.uniform(0,math.tau))
     cyl(name,loc,radius,length,mat,rot=rot,verts=14)
-    # dark hollow caps slightly inset visually
-    cyl(name+'_HOLE_A',(loc[0]+rng.uniform(-.02,.02),loc[1]+rng.uniform(-.02,.02),loc[2]),radius*.66,.012,mats()['black'],rot=rot,verts=14)
+    # True hollow-looking end openings: place dark caps on both actual cylinder ends.
+    axis = Euler(rot, 'XYZ').to_matrix() @ Vector((0.0,0.0,1.0))
+    center = Vector(loc)
+    for suffix,sign in (('A',1.0),('B',-1.0)):
+        p = center + axis * (sign * (length*.5 + .002))
+        cyl(name+'_HOLE_'+suffix,tuple(p),radius*.68,.014,mats()['black'],rot=rot,verts=14)
 
 
 def mound_z(x,y,peak=1.35):
