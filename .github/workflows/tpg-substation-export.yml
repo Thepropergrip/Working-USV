@@ -21,7 +21,7 @@ permissions:
 jobs:
   export-substation:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
