@@ -1,0 +1,6 @@
+{
+  "mode": "script",
+  "script": "edm-jobs/build_tpg_tacoma_intact.py",
+  "output": "TPG_Tacoma_Recon.edm",
+  "save_blend": true
+}
