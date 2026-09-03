@@ -15,20 +15,63 @@ MAT_DESCS = build_material_descriptions()
 MATS = {}
 
 
-def _tex(name, base, variation=.06, streak=False, mottled=False, size=256):
+def _tex(name, base, variation=.06, streak=False, mottled=False, size=512):
     path = TEXDIR / (name + ".png")
     if path.exists(): return path
     img = bpy.data.images.new(name, width=size, height=size, alpha=True)
-    rng = random.Random(zlib.crc32(name.encode("utf-8")) & 0xffffffff)
+    seed = zlib.crc32(name.encode("utf-8")) & 0xffffffff
+    rng = random.Random(seed)
+    is_concrete = ("Concrete" in name or "Aggregate" in name)
+    is_aggregate = ("Aggregate" in name)
+    is_rust = ("Rust" in name)
+    is_soot = ("Soot" in name)
+    is_metal = ("Steel" in name or "Galvanized" in name)
     px=[]
+    p1=(seed % 997)*.013
+    p2=(seed % 571)*.019
     for y in range(size):
         for x in range(size):
             u=x/max(1,size-1); v=y/max(1,size-1)
-            n=(rng.random()-.5)*variation
-            if streak: n += .018*math.sin(y*.12)+.010*math.sin(x*.055+y*.04)
-            if mottled: n += .025*math.sin(x*.10)*math.sin(y*.075)+.018*math.sin((x+y)*.037)
-            px.extend((max(0,min(1,base[0]+n)),max(0,min(1,base[1]+n)),max(0,min(1,base[2]+n)),1.0))
-    img.pixels=px; img.filepath_raw=str(path); img.file_format='PNG'; img.save()
+            fine=(rng.random()-.5)*variation
+            low=.018*math.sin(x*.031+p1)+.014*math.sin(y*.027+p2)+.012*math.sin((x+y)*.014+p1*.3)
+            n=fine+low
+            if streak:
+                n += .018*math.sin(y*.12)+.010*math.sin(x*.055+y*.04)
+            if mottled:
+                n += .025*math.sin(x*.10)*math.sin(y*.075)+.018*math.sin((x+y)*.037)
+
+            r,g,b=base
+            if is_concrete:
+                # thin branching-looking fracture lines plus dark/light aggregate flecks
+                crack=abs(math.sin(x*.041+y*.067+p1)+.58*math.sin(x*.089-y*.033+p2))
+                if crack < .030:
+                    n -= .105*(1.0-crack/.030)
+                speck=rng.random()
+                if speck < (.034 if is_aggregate else .018):
+                    n += rng.uniform(-.15,.09)
+            if is_rust:
+                oxide=.045*math.sin(y*.026+x*.009+p2)+.035*math.sin(y*.081+p1)
+                r += max(-.015,oxide)
+                g -= max(0,oxide)*.48
+                b -= max(0,oxide)*.72
+                if rng.random()<.012:
+                    r += .07; g += .012; b -= .018
+            if is_metal:
+                brush=.018*math.sin(y*.23+p1)+.010*math.sin(y*.51+x*.012)
+                r+=brush; g+=brush; b+=brush
+            if is_soot:
+                n -= .020*abs(math.sin(x*.035+y*.021+p1))
+
+            px.extend((
+                max(0,min(1,r+n)),
+                max(0,min(1,g+n)),
+                max(0,min(1,b+n)),
+                1.0
+            ))
+    img.pixels=px
+    img.filepath_raw=str(path)
+    img.file_format='PNG'
+    img.save()
     return path
 
 
@@ -41,8 +84,18 @@ def edm_mat(name,color,rough=.82,metal=.0,variation=.05,streak=False,mottled=Fal
     m.node_tree.links.new(tex.outputs["Color"],group.inputs[NodeSocketInDefaultEnum.BASE_COLOR])
     rmo_path=TEXDIR/(name+"_RoughMet.png")
     if not rmo_path.exists():
-        img=bpy.data.images.new(name+"_RoughMet",width=8,height=8,alpha=True)
-        img.pixels=[1.0,rough,metal,1.0]*64; img.filepath_raw=str(rmo_path); img.file_format='PNG'; img.save()
+        rmo_size=64
+        img=bpy.data.images.new(name+"_RoughMet",width=rmo_size,height=rmo_size,alpha=True)
+        rr=random.Random((zlib.crc32((name+"_rmo").encode("utf-8")) & 0xffffffff))
+        vals=[]
+        for _ in range(rmo_size*rmo_size):
+            rv=max(0.02,min(0.99,rough+(rr.random()-.5)*.075))
+            mv=max(0.0,min(1.0,metal+(rr.random()-.5)*(.055 if metal>0 else .006)))
+            vals.extend((1.0,rv,mv,1.0))
+        img.pixels=vals
+        img.filepath_raw=str(rmo_path)
+        img.file_format='PNG'
+        img.save()
     rmo=m.node_tree.nodes.new("ShaderNodeTexImage"); rmo.image=bpy.data.images.load(str(rmo_path),check_existing=True)
     rmo.image.colorspace_settings.name='Non-Color'
     m.node_tree.links.new(rmo.outputs['Color'],group.inputs[NodeSocketInDefaultEnum.ROUGH_METAL])
