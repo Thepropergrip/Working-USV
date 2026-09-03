@@ -11,6 +11,16 @@ on:
       - "edm-jobs/tpg_tacoma_*.json"
       - "edm-jobs/package_tpg_tacoma.ps1"
       - "tools/dcs-edm/**"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/tpg-tacoma-export.yml"
+      - "edm-jobs/build_tpg_tacoma.py"
+      - "edm-jobs/build_tpg_tacoma_*.py"
+      - "edm-jobs/tpg_tacoma_*.json"
+      - "edm-jobs/package_tpg_tacoma.ps1"
+      - "tools/dcs-edm/**"
   workflow_dispatch:
 
 permissions:
