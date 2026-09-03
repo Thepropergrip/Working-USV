@@ -1,0 +1,15 @@
+name: TPG Actions Smoke Test
+
+on:
+  push:
+    branches:
+      - tpg-rubble-pile-v1
+    paths:
+      - ".github/workflows/tpg-actions-smoke.yml"
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Runner alive
+        run: echo "TPG_ACTIONS_RUNNER_OK"
