@@ -59,7 +59,8 @@ def texture(name, base, variation=0.035, stripe=False, size=384, splotch=False):
     img.save()
     return path
 
-def edm_mat(name, color, rough=0.7, metal=0.0, variation=0.035, stripe=False, splotch=False):
+def edm_mat(name, color, rough=0.7, metal=0.0, variation=0.035, stripe=False, splotch=False,
+            emissive_color=None, emissive_value=0.0):
     m = bpy.data.materials.new(name)
     m.use_nodes = True
     m.node_tree.nodes.clear()
@@ -81,6 +82,12 @@ def edm_mat(name, color, rough=0.7, metal=0.0, variation=0.035, stripe=False, sp
     rmo.image = bpy.data.images.load(str(rmo_path), check_existing=True)
     rmo.image.colorspace_settings.name = "Non-Color"
     m.node_tree.links.new(rmo.outputs["Color"], group.inputs[NodeSocketInDefaultEnum.ROUGH_METAL])
+    if emissive_color is not None:
+        # Official ED default material: constant self-illumination color plus intensity.
+        # Keep an ordinary bright albedo for daylight readability, then let the EDM
+        # emissive block carry the digits through dusk/night independently of scene light.
+        group.inputs[NodeSocketInDefaultEnum.EMISSIVE].default_value = (*emissive_color, 1.0)
+        group.inputs[NodeSocketInDefaultEnum.EMISSIVE_VALUE].default_value = float(emissive_value)
     return m
 
 def mats():
@@ -102,6 +109,8 @@ def mats():
         "yellow": edm_mat("TPG_GASSTATION110_SafetyYellow",(0.72,0.49,0.035),0.64,0.02,0.025),
         "blue": edm_mat("TPG_GASSTATION110_StickerBlue",(0.035,0.22,0.42),0.52,0.02,0.015),
         "green": edm_mat("TPG_GASSTATION110_StickerGreen",(0.045,0.36,0.13),0.56,0.01,0.015),
+        "price_led": edm_mat("TPG_GASSTATION110_PriceLED",(0.16,0.92,0.24),0.30,0.01,0.010,
+                             emissive_color=(0.08,1.0,0.16), emissive_value=2.35),
         "orange": edm_mat("TPG_GASSTATION110_StickerOrange",(0.82,0.26,0.025),0.55,0.01,0.018),
         "cream": edm_mat("TPG_GASSTATION110_Cream",(0.88,0.82,0.66),0.66,0.0,0.020),
         "interior": edm_mat("TPG_GASSTATION110_InteriorDark",(0.075,0.070,0.060),0.78,0.01,0.020),
@@ -324,7 +333,7 @@ def build_price_sign(M):
         box("PRICE_ROW_"+str(i),(-14.7,7.455,z),(3.86,.030,.56),M["interior"],.004)
         text_obj(grade,"PRICE_GRADE_"+str(i),(-15.45,7.425,z+.11),.145,M["cream"],extrude=.006)
         text_obj(octane,"PRICE_OCTANE_"+str(i),(-15.42,7.425,z-.12),.19,M[matname],extrude=.007)
-        text_obj(price,"PRICE_VALUE_"+str(i),(-13.83,7.425,z),.36,M["green"],extrude=.010)
+        text_obj(price,"PRICE_VALUE_"+str(i),(-13.83,7.425,z),.39,M["price_led"],extrude=.010)
         box("PRICE_DIV_"+str(i),(-14.7,7.44,z-.32),(3.80,.018,.018),M["aluminum"],.0)
 
     box("PRICE_FOOTER",(-14.7,7.46,4.36),(3.90,.028,.42),M["blue"],.005)
