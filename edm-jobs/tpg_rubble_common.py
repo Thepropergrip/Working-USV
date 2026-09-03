@@ -57,6 +57,7 @@ def mats():
       'aggregate':edm_mat('TPG_RUB100_Aggregate',(.30,.29,.27),.97,0,.12,False,True),
       'brick':edm_mat('TPG_RUB100_Brick',(.36,.16,.095),.92,0,.07,True,True),
       'rust':edm_mat('TPG_RUB100_RustSteel',(.25,.095,.035),.84,.42,.08,True,True),
+      'rust_dark':edm_mat('TPG_RUB100_RustDark',(.12,.045,.018),.88,.35,.07,True,True),
       'steel':edm_mat('TPG_RUB100_DullSteel',(.24,.25,.24),.50,.74,.045,True),
       'galv':edm_mat('TPG_RUB100_Galvanized',(.47,.49,.49),.43,.72,.038,True),
       'pipe':edm_mat('TPG_RUB100_DirtyPipe',(.30,.31,.29),.72,.28,.06,True,True),
