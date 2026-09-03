@@ -12,6 +12,7 @@ on:
       - "edm-jobs/build_tpg_tacoma_*.py"
       - "edm-jobs/tpg_tacoma_*.json"
       - "edm-jobs/package_tpg_tacoma.ps1"
+      - "edm-jobs/render_tpg_tacoma_preview.py"
       - "tools/dcs-edm/**"
   pull_request:
     branches:
@@ -101,6 +102,17 @@ jobs:
           $edm = Get-ChildItem $out -Filter *.edm -File
           if (-not $edm) { throw "No EDM produced for ${{ matrix.variant }}." }
           $edm | ForEach-Object { Write-Host "$($_.Name) $($_.Length) bytes" }
+
+      - name: Render intact geometry QA preview
+        if: matrix.variant == 'intact'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $blend = Get-ChildItem "edm-artifacts" -Filter "*.blend" -File | Select-Object -First 1
+          if (-not $blend) { throw "Intact build .blend missing for QA preview." }
+          & $env:BLENDER_EXE --background "$($blend.FullName)" --python "edm-jobs/render_tpg_tacoma_preview.py"
+          if ($LASTEXITCODE -ne 0) { throw "Tacoma QA preview render failed." }
+          if (-not (Test-Path "edm-artifacts\TPG_Tacoma_Recon_preview.png")) { throw "Tacoma QA preview PNG missing." }
 
       - name: Upload ${{ matrix.variant }}
         uses: actions/upload-artifact@v4
