@@ -88,22 +88,22 @@ jobs:
           "BLENDER_USER_SCRIPTS=$scripts" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
           "EDM_EXPORTER_COMMIT=$env:ED_EXPORTER_COMMIT" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Export \${{ matrix.variant }}
+      - name: Export ${{ matrix.variant }}
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           $out = Join-Path $env:GITHUB_WORKSPACE "edm-artifacts"
           New-Item -ItemType Directory -Force -Path $out | Out-Null
-          & $env:BLENDER_EXE --background --python "tools/dcs-edm/export_job.py" -- --job "\${{ matrix.job }}" --artifact-dir "$out"
-          if ($LASTEXITCODE -ne 0) { throw "EDM export failed for \${{ matrix.variant }}." }
+          & $env:BLENDER_EXE --background --python "tools/dcs-edm/export_job.py" -- --job "${{ matrix.job }}" --artifact-dir "$out"
+          if ($LASTEXITCODE -ne 0) { throw "EDM export failed for ${{ matrix.variant }}." }
           $edm = Get-ChildItem $out -Filter *.edm -File
-          if (-not $edm) { throw "No EDM produced for \${{ matrix.variant }}." }
+          if (-not $edm) { throw "No EDM produced for ${{ matrix.variant }}." }
           $edm | ForEach-Object { Write-Host "$($_.Name) $($_.Length) bytes" }
 
-      - name: Upload \${{ matrix.variant }}
+      - name: Upload ${{ matrix.variant }}
         uses: actions/upload-artifact@v4
         with:
-          name: tpg-tacoma-\${{ matrix.variant }}
+          name: tpg-tacoma-${{ matrix.variant }}
           path: edm-artifacts/**
           if-no-files-found: error
           retention-days: 30
