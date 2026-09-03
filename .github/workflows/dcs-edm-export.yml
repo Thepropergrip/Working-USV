@@ -92,6 +92,10 @@ jobs:
           New-Item -ItemType Directory -Force -Path $out | Out-Null
 
           if (("${{ github.ref_name }}" -eq "tpg-gas-station") -or ("${{ github.head_ref }}" -eq "tpg-gas-station")) {
+            python -m pip install --disable-pip-version-check --quiet pillow arabic-reshaper python-bidi
+            if ($LASTEXITCODE -ne 0) { throw "Failed to install livery texture generator dependencies." }
+            python "edm-jobs/generate_tpg_station_liveries.py" --output "$out\\LiveryTextures"
+            if ($LASTEXITCODE -ne 0) { throw "Failed to generate USA/Russia/Syria livery textures." }
             $jobs = @(
               "edm-jobs/tpg_station_intact.json",
               "edm-jobs/tpg_station_lod1.json",
@@ -142,17 +146,17 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $src = Join-Path $env:GITHUB_WORKSPACE "edm-artifacts\TPG_Gas_Station_V1.1_DCS_DropIn.zip"
+          $src = Join-Path $env:GITHUB_WORKSPACE "edm-artifacts\TPG_Gas_Station_V1.2_Livery_Edition_DCS_DropIn.zip"
           if (-not (Test-Path $src)) { throw "Expected gas station drop-in ZIP not found: $src" }
           $dstDir = Join-Path $env:GITHUB_WORKSPACE "build-output"
           New-Item -ItemType Directory -Force -Path $dstDir | Out-Null
-          $dst = Join-Path $dstDir "TPG_Gas_Station_V1.1_DCS_DropIn_READY.zip"
+          $dst = Join-Path $dstDir "TPG_Gas_Station_V1.2_Livery_Edition_DCS_DropIn_READY.zip"
           Copy-Item $src $dst -Force
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add build-output/TPG_Gas_Station_V1.1_DCS_DropIn_READY.zip
+          git add build-output/TPG_Gas_Station_V1.2_Livery_Edition_DCS_DropIn_READY.zip
           if (-not (git diff --cached --quiet)) {
-            git commit -m "Publish gas station V1.1 z-fight hotfix build"
+            git commit -m "Publish gas station V1.2 livery edition build"
             git push origin HEAD:tpg-gas-station
           } else {
             Write-Host "No build-output changes to publish."
