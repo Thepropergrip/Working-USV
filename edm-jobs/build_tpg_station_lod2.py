@@ -9,7 +9,8 @@ build_station(False)
 keep_prefixes=(
     "FORECOURT","APRON","STORE","STORE_PARAPET","STORE_RED_BAND",
     "CANOPY","CANOPY_RED_FRONT","CANOPY_RED_REAR","CANOPY_SIDE_",
-    "COLUMN_","PRICE_CABINET","PRICE_HEADER","PRICE_POST_","PRICE_FOOT_"
+    "COLUMN_","PRICE_CABINET","PRICE_HEADER","PRICE_POST_","PRICE_FOOT_",
+    "L10N_PYLON","L10N_PRICELED","L10N_STORE_SIGN","L10N_CANOPY_SIGN"
 )
 for o in list(bpy.data.objects):
     if o.name.startswith("COL_"):
