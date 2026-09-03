@@ -143,10 +143,10 @@ Compress-Archive -Path $pkg -DestinationPath $zip -CompressionLevel Optimal
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $z = [System.IO.Compression.ZipFile]::OpenRead($zip)
 try {
-  $tops = $z.Entries | ForEach-Object {
+  $tops = @($z.Entries | ForEach-Object {
     $n = $_.FullName.Replace("\","/")
     if ($n.Contains("/")) { $n.Split("/")[0] } else { $n }
-  } | Where-Object { $_ } | Sort-Object -Unique
+  } | Where-Object { $_ } | Sort-Object -Unique)
   if ($tops.Count -ne 1 -or $tops[0] -ne "TPG_Warzone_Rubble_Pile_01") {
     throw "ZIP nesting validation failed: $($tops -join ', ')"
   }
