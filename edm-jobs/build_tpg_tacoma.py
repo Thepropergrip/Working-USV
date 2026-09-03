@@ -10,7 +10,16 @@ MAT_DESCS=build_material_descriptions(); M={}; LOD=int(os.environ.get('TPG_TACOM
 
 def payload():
     parts=sorted((WORK/'edm-jobs'/'tacoma_fbx_mesh_b64').glob('part*.txt'))
-    raw=base64.b64decode(''.join(p.read_text().strip() for p in parts)); z=np.load(io.BytesIO(raw),allow_pickle=False)
+    if not parts: raise RuntimeError('Tacoma FBX mesh payload parts are missing')
+    chunks=[]
+    for p in parts:
+        txt=''.join(p.read_text().split())
+        try: chunks.append(base64.b64decode(txt,validate=True))
+        except Exception as e: raise RuntimeError(f'Invalid base64 in {p.name}: {e}') from e
+    raw=b''.join(chunks)
+    print(f'[TPG TACOMA FBX V3] payload parts={len(parts)} bytes={len(raw)} magic={raw[:4]!r}')
+    if raw[:2] != b'PK': raise RuntimeError(f'Tacoma mesh payload is not an NPZ/ZIP stream: magic={raw[:8]!r}')
+    z=np.load(io.BytesIO(raw),allow_pickle=False)
     meta=json.loads(str(z['meta'])); return z,meta
 
 def tex(name,c,rough=.7,metal=0):
