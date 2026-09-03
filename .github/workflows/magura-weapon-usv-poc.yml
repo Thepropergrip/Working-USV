@@ -7,6 +7,12 @@ on:
     paths:
       - "experiments/TPG_MAGURA_WEAPON_USV_POC/**"
       - ".github/workflows/magura-weapon-usv-poc.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "experiments/TPG_MAGURA_WEAPON_USV_POC/**"
+      - ".github/workflows/magura-weapon-usv-poc.yml"
   workflow_dispatch:
 
 permissions:
