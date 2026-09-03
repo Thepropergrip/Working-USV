@@ -153,15 +153,15 @@ def sign_plate(name,center,width,height,plate_mat,text,text_mat,M,text_size=.16,
     return name
 
 def danger_sign(name,center,M,width=1.60,height=.82):
-    # Familiar utility warning placard: white field, red DANGER header, black hazard line.
+    # Familiar utility warning placard: a thin white sign with a red DANGER header
+    # and flat printed lettering. No lettering is physically extruded.
     x,y,z=center
-    sign_plate(name,(x,y,z),width,height,M["white"],"DANGER",M["white"],M,
-               text_size=.17,depth=.006,subtext="HIGH VOLTAGE",
-               subtext_mat=M["black"],subtext_size=.11)
-    # Flat red header band behind DANGER lettering.
-    box(name+"_HEADER",(x,y-.004,z+.18*height),(width*.94,.0025,height*.30),M["red"],0.0)
-    # Re-apply header text above the red band as a white flat decal.
-    text_obj("DANGER",name+"_HEADER_TEXT",(x,y-.006,z+.18*height),.17,M["white"])
+    depth=.006
+    box(name+"_PLATE",(x,y,z),(width,depth,height),M["white"],0.0)
+    face_y=y-depth/2-.0015
+    box(name+"_HEADER",(x,face_y+.0004,z+.20*height),(width*.94,.0015,height*.30),M["red"],0.0)
+    text_obj("DANGER",name+"_HEADER_TEXT",(x,face_y-.001,z+.20*height),.17,M["white"])
+    text_obj("HIGH VOLTAGE",name+"_HAZARD_TEXT",(x,face_y-.001,z-.17*height),.11,M["black"])
     return name
 
 def equipment_label(name,center,M,text,width=1.10,height=.38,text_size=.13,plate="white",ink="black"):
