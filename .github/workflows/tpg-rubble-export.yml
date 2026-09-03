@@ -1,4 +1,4 @@
-name: TPG Rubble Pile Parallel EDM Build
+name: TPG Rubble Pile EDM Debug
 
 on:
   push:
@@ -8,43 +8,24 @@ on:
       - ".github/workflows/tpg-rubble-export.yml"
       - "edm-jobs/tpg_rubble*"
       - "edm-jobs/build_tpg_rubble*"
-      - "edm-jobs/package_tpg_rubble.ps1"
       - "tools/dcs-edm/**"
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pull-requests: write
+  contents: write
 
 jobs:
-  export-rubble:
+  debug-intact:
     runs-on: windows-latest
     timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - variant: intact
-            job: edm-jobs/tpg_rubble_intact.json
-          - variant: lod1
-            job: edm-jobs/tpg_rubble_lod1.json
-          - variant: lod2
-            job: edm-jobs/tpg_rubble_lod2.json
-          - variant: destroyed
-            job: edm-jobs/tpg_rubble_destroyed.json
     env:
       BLENDER_VERSION: "4.1.1"
       BLENDER_URL: "https://download.blender.org/release/Blender4.1/blender-4.1.1-windows-x64.zip"
       ED_EXPORTER_COMMIT: "5f03ba70ec96ca6ce68028eabc786ecd97f9cf93"
-      GH_TOKEN: ${{ github.token }}
-
     steps:
       - id: checkout
-        name: Checkout
         uses: actions/checkout@v4
-
       - id: blender
-        name: Install Blender 4.1.1
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -55,9 +36,7 @@ jobs:
           $exe = Get-ChildItem -Path $dir -Filter blender.exe -Recurse | Select-Object -First 1
           if (-not $exe) { throw "Blender executable not found." }
           "BLENDER_EXE=$($exe.FullName)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
-
       - id: exporter
-        name: Install official ED EDM exporter
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -71,92 +50,46 @@ jobs:
           $upper = Join-Path $addons "io_scene_edm\Materials"
           $temp = Join-Path $addons "io_scene_edm\__materials_casefix"
           $lower = Join-Path $addons "io_scene_edm\materials"
-          if (Test-Path $upper) {
-            Rename-Item $upper "__materials_casefix"
-            Rename-Item $temp "materials"
-          }
+          if (Test-Path $upper) { Rename-Item $upper "__materials_casefix"; Rename-Item $temp "materials" }
           if (-not (Test-Path (Join-Path $lower "__init__.py"))) { throw "ED material package normalization failed." }
           if (-not (Test-Path (Join-Path $addons "io_scene_edm\pyedm_311.pyd"))) { throw "Official pyedm_311.pyd missing." }
           "BLENDER_USER_SCRIPTS=$scripts" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
-
       - id: export
-        name: Export ${{ matrix.variant }}
         shell: pwsh
         run: |
           $ErrorActionPreference = "Continue"
           $out = Join-Path $env:GITHUB_WORKSPACE "edm-artifacts"
           New-Item -ItemType Directory -Force -Path $out | Out-Null
-          $log = Join-Path $out "${{ matrix.variant }}-export.log"
-          & $env:BLENDER_EXE --background --python "tools/dcs-edm/export_job.py" -- --job "${{ matrix.job }}" --artifact-dir "$out" *>&1 | Tee-Object -FilePath $log
-          $code = $LASTEXITCODE
-          if ($code -ne 0) { throw "EDM export failed for ${{ matrix.variant }} with exit code $code." }
-          $edm = Get-ChildItem $out -Filter *.edm -File
-          if (-not $edm) { throw "No EDM produced for ${{ matrix.variant }}." }
-          $edm | ForEach-Object { Write-Host "$($_.Name) $($_.Length) bytes" }
-
-      - name: Post validation status to PR 6
+          $log = Join-Path $out "intact-export.log"
+          & $env:BLENDER_EXE --background --python "tools/dcs-edm/export_job.py" -- --job "edm-jobs/tpg_rubble_intact.json" --artifact-dir "$out" *>&1 | Tee-Object -FilePath $log
+          $code=$LASTEXITCODE
+          if ($code -ne 0) { throw "EDM export failed with exit code $code" }
+      - name: Publish status back to branch
         if: always()
         shell: pwsh
         run: |
-          $body = "TPG rubble ${{ matrix.variant }} push validation: checkout=${{ steps.checkout.outcome }}, blender=${{ steps.blender.outcome }}, exporter=${{ steps.exporter.outcome }}, export=${{ steps.export.outcome }}."
-          $log = "edm-artifacts\${{ matrix.variant }}-export.log"
-          if (Test-Path $log) {
-            $tail = (Get-Content $log -Tail 80 | Out-String)
-            if ($tail.Length -gt 7000) { $tail = $tail.Substring($tail.Length-7000) }
-            $body += "`n`n```text`n$tail`n```"
-          }
-          $body | gh pr comment 6 --body-file -
-
-      - name: Upload diagnostics
+          $ErrorActionPreference = "Continue"
+          New-Item -ItemType Directory -Force -Path "ci-status" | Out-Null
+          $status = @"
+run_id=${{ github.run_id }}
+checkout=${{ steps.checkout.outcome }}
+blender=${{ steps.blender.outcome }}
+exporter=${{ steps.exporter.outcome }}
+export=${{ steps.export.outcome }}
+"@
+          $log = "edm-artifacts\intact-export.log"
+          if (Test-Path $log) { $status += "`n--- LOG TAIL ---`n" + (Get-Content $log -Tail 160 | Out-String) }
+          Set-Content -Path "ci-status/rubble-intact.txt" -Value $status -Encoding UTF8
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ci-status/rubble-intact.txt
+          git commit -m "Record rubble EDM debug status [skip ci]"
+          git push origin HEAD:tpg-rubble-pile-v1
+      - name: Upload debug artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: tpg-rubble-${{ matrix.variant }}-diagnostics
-          path: edm-artifacts/*.log
+          name: tpg-rubble-intact-debug
+          path: edm-artifacts/**
           if-no-files-found: ignore
           retention-days: 7
-
-      - name: Upload ${{ matrix.variant }}
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: tpg-rubble-${{ matrix.variant }}
-          path: edm-artifacts/**
-          if-no-files-found: error
-          retention-days: 30
-
-  package-rubble:
-    needs: export-rubble
-    runs-on: windows-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Download exported variants
-        uses: actions/download-artifact@v4
-        with:
-          pattern: tpg-rubble-*
-          path: edm-artifacts
-          merge-multiple: true
-      - name: Package DCS drop-in
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          & "edm-jobs/package_tpg_rubble.ps1"
-          if (-not $?) { throw "Packaging failed." }
-          $zip = "edm-artifacts\TPG_Rubble_Pile_20ft_V1_DCS_DropIn.zip"
-          if (-not (Test-Path $zip)) { throw "Final DCS ZIP missing." }
-          Get-Item $zip | ForEach-Object { Write-Host "FINAL PACKAGE: $($_.FullName) $($_.Length) bytes" }
-      - name: Upload final DCS package
-        uses: actions/upload-artifact@v4
-        with:
-          name: TPG-Rubble-Pile-20ft-V1-DCS-DropIn
-          path: |
-            edm-artifacts/TPG_Rubble_Pile_20ft_V1_DCS_DropIn.zip
-            edm-artifacts/TPG_Rubble_Pile_20ft_V1/**
-          if-no-files-found: error
-          retention-days: 30
-      - name: Post package success to PR 6
-        shell: pwsh
-        run: |
-          "TPG rubble final DCS drop-in package built successfully from all four verified EDM variants." | gh pr comment 6 --body-file -
