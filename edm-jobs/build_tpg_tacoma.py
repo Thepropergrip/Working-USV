@@ -1,4 +1,4 @@
-import bpy, math, os, io, base64, json, glob
+import bpy, math, os, io, base64, json, glob, lzma, struct
 from pathlib import Path
 import numpy as np
 WORK=Path(os.environ.get('GITHUB_WORKSPACE',os.getcwd())).resolve(); TEXDIR=WORK/'edm-artifacts'/'Textures'; TEXDIR.mkdir(parents=True,exist_ok=True)
@@ -9,18 +9,23 @@ from objects_custom_props import get_edm_props
 MAT_DESCS=build_material_descriptions(); M={}; LOD=int(os.environ.get('TPG_TACOMA_LOD','0')); DESTROYED=os.environ.get('TPG_TACOMA_DESTROYED','0')=='1'
 
 def payload():
-    parts=sorted((WORK/'edm-jobs'/'tacoma_fbx_mesh_b64').glob('part*.txt'))
-    if not parts: raise RuntimeError('Tacoma FBX mesh payload parts are missing')
-    chunks=[]
-    for p in parts:
-        txt=''.join(p.read_text().split())
-        try: chunks.append(base64.b64decode(txt,validate=True))
-        except Exception as e: raise RuntimeError(f'Invalid base64 in {p.name}: {e}') from e
-    raw=b''.join(chunks)
-    print(f'[TPG TACOMA FBX V3] payload parts={len(parts)} bytes={len(raw)} magic={raw[:4]!r}')
-    if raw[:2] != b'PK': raise RuntimeError(f'Tacoma mesh payload is not an NPZ/ZIP stream: magic={raw[:8]!r}')
-    z=np.load(io.BytesIO(raw),allow_pickle=False)
-    meta=json.loads(str(z['meta'])); return z,meta
+    p=WORK/'edm-jobs'/'tacoma_payload_v1.b64'
+    if not p.exists(): raise RuntimeError('Corrected Tacoma compact mesh payload is missing')
+    packed=base64.b64decode(''.join(p.read_text().split()),validate=True)
+    raw=lzma.decompress(packed)
+    hlen=struct.unpack('<I',raw[:4])[0]
+    meta=json.loads(raw[4:4+hlen].decode('utf-8'))
+    if meta.get('format')!='TPG_TACOMA_MESH_V1': raise RuntimeError(f"Unexpected Tacoma payload format: {meta.get('format')}")
+    data=memoryview(raw)[4+hlen:]; scale=float(meta.get('vscale',0.001)); z={}
+    for info in meta['geometries']:
+        n=info['name']
+        dv,dp,dm=info['v'],info['p'],info['mat']
+        v=np.frombuffer(data[dv['offset']:dv['offset']+dv['bytes']],dtype='<i2').copy().reshape(dv['shape']).astype(np.float32)*scale
+        pi=np.frombuffer(data[dp['offset']:dp['offset']+dp['bytes']],dtype='<i4').copy()
+        mi=np.frombuffer(data[dm['offset']:dm['offset']+dm['bytes']],dtype='u1').copy()
+        z[n+'_v']=v; z[n+'_p']=pi; z[n+'_mat']=mi
+    print(f"[TPG TACOMA FBX V3] compact payload bytes={len(raw)} geometries={len(meta['geometries'])}")
+    return z,meta
 
 def tex(name,c,rough=.7,metal=0):
     p=TEXDIR/(name+'.png'); rp=TEXDIR/(name+'_RoughMet.png')
