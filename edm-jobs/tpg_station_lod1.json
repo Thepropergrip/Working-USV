@@ -1,6 +1,6 @@
 {
   "mode": "script",
   "script": "edm-jobs/build_tpg_station_lod1.py",
-  "output": "TPG_Gas_Station_V1_1_LOD1.edm",
+  "output": "TPG_Gas_Station_V1_2_Liveries_LOD1.edm",
   "save_blend": false
 }
