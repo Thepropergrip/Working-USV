@@ -21,6 +21,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   export-rubble:
@@ -42,6 +43,7 @@ jobs:
       BLENDER_VERSION: "4.1.1"
       BLENDER_URL: "https://download.blender.org/release/Blender4.1/blender-4.1.1-windows-x64.zip"
       ED_EXPORTER_COMMIT: "5f03ba70ec96ca6ce68028eabc786ecd97f9cf93"
+      GH_TOKEN: ${{ github.token }}
 
     steps:
       - name: Checkout
@@ -84,14 +86,32 @@ jobs:
       - name: Export ${{ matrix.variant }}
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
+          $ErrorActionPreference = "Continue"
           $out = Join-Path $env:GITHUB_WORKSPACE "edm-artifacts"
           New-Item -ItemType Directory -Force -Path $out | Out-Null
-          & $env:BLENDER_EXE --background --python "tools/dcs-edm/export_job.py" -- --job "${{ matrix.job }}" --artifact-dir "$out"
-          if ($LASTEXITCODE -ne 0) { throw "EDM export failed for ${{ matrix.variant }}." }
+          $log = Join-Path $out "${{ matrix.variant }}-export.log"
+          & $env:BLENDER_EXE --background --python "tools/dcs-edm/export_job.py" -- --job "${{ matrix.job }}" --artifact-dir "$out" *>&1 | Tee-Object -FilePath $log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            if ("${{ github.event_name }}" -eq "pull_request") {
+              $tail = (Get-Content $log -Tail 120 | Out-String)
+              $body = "TPG rubble **${{ matrix.variant }}** EDM export failed (exit $code).`n`n```text`n$tail`n```"
+              $body | gh pr comment "${{ github.event.pull_request.number }}" --body-file -
+            }
+            throw "EDM export failed for ${{ matrix.variant }} with exit code $code."
+          }
           $edm = Get-ChildItem $out -Filter *.edm -File
           if (-not $edm) { throw "No EDM produced for ${{ matrix.variant }}." }
           $edm | ForEach-Object { Write-Host "$($_.Name) $($_.Length) bytes" }
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tpg-rubble-${{ matrix.variant }}-diagnostics
+          path: edm-artifacts/*.log
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Upload ${{ matrix.variant }}
         uses: actions/upload-artifact@v4
@@ -108,14 +128,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Download exported variants
         uses: actions/download-artifact@v4
         with:
           pattern: tpg-rubble-*
           path: edm-artifacts
           merge-multiple: true
-
       - name: Package DCS drop-in
         shell: pwsh
         run: |
@@ -125,7 +143,6 @@ jobs:
           $zip = "edm-artifacts\TPG_Rubble_Pile_20ft_V1_DCS_DropIn.zip"
           if (-not (Test-Path $zip)) { throw "Final DCS ZIP missing." }
           Get-Item $zip | ForEach-Object { Write-Host "FINAL PACKAGE: $($_.FullName) $($_.Length) bytes" }
-
       - name: Upload final DCS package
         uses: actions/upload-artifact@v4
         with:
