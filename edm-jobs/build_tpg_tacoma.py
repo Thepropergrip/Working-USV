@@ -603,6 +603,17 @@ def build():
     add_interior()
     wreck_damage()
     add_collision()
+
+    # Boolean operations in Blender can preserve transient polygon material
+    # indices from cutter geometry. EDM expects every polygon index to resolve
+    # against the object's material slots, so normalize them before export.
+    for obj in bpy.context.scene.objects:
+        if obj.type == "MESH" and len(obj.material_slots) > 0:
+            max_index = len(obj.material_slots) - 1
+            for poly in obj.data.polygons:
+                if poly.material_index < 0 or poly.material_index > max_index:
+                    poly.material_index = 0
+
     bpy.context.scene.frame_set(100)
     print(f"[TPG TACOMA V2] built LOD={LOD} destroyed={DESTROYED} objects={len(bpy.context.scene.objects)}")
     print("[TPG TACOMA V2] DCS wheel args: 8 rotation / 9 steering with separate centered pivots")
