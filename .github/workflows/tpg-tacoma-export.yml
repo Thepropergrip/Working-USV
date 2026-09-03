@@ -103,7 +103,7 @@ jobs:
           if (-not $edm) { throw "No EDM produced for ${{ matrix.variant }}." }
           $edm | ForEach-Object { Write-Host "$($_.Name) $($_.Length) bytes" }
 
-      - name: Render intact geometry QA preview
+      - name: Dump intact geometry QA meshes
         if: matrix.variant == 'intact'
         shell: pwsh
         run: |
@@ -111,8 +111,10 @@ jobs:
           $blend = Get-ChildItem "edm-artifacts" -Filter "*.blend" -File | Select-Object -First 1
           if (-not $blend) { throw "Intact build .blend missing for QA preview." }
           & $env:BLENDER_EXE --background "$($blend.FullName)" --python "edm-jobs/render_tpg_tacoma_preview.py"
-          if ($LASTEXITCODE -ne 0) { throw "Tacoma QA preview render failed." }
-          if (-not (Test-Path "edm-artifacts\TPG_Tacoma_Recon_preview.png")) { throw "Tacoma QA preview PNG missing." }
+          if ($LASTEXITCODE -ne 0) { throw "Tacoma QA mesh dump failed." }
+          if (-not (Test-Path "edm-artifacts\TPG_Tacoma_Recon_QA_neutral.obj")) { throw "Tacoma neutral QA OBJ missing." }
+          if (-not (Test-Path "edm-artifacts\TPG_Tacoma_Recon_QA_steer_left.obj")) { throw "Tacoma left-steer QA OBJ missing." }
+          if (-not (Test-Path "edm-artifacts\TPG_Tacoma_Recon_QA_steer_right.obj")) { throw "Tacoma right-steer QA OBJ missing." }
 
       - name: Upload ${{ matrix.variant }}
         uses: actions/upload-artifact@v4
