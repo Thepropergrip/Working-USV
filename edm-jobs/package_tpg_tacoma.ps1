@@ -59,68 +59,60 @@ plugin_done()
 Set-Content -Path (Join-Path $pkg "entry.lua") -Value $entry -Encoding UTF8
 
 $dbLua = @'
-GT_t.CH_t.TPG_TACOMA_RECON = {
-    life = 4.0,
-    mass = 2500,
-    length = 5.728,
-    width = 1.895,
-
-    -- Requested 113 mph road speed.
-    -- 113 mph = 181.856 km/h = 50.5156 m/s.
-    max_road_velocity = 50.5156,
-
-    max_slope = 0.55,
-    engine_power = 21000,
-    gear_count = 6,
-    canSwim = false,
-    canWade = true,
-    waterline_level = 0.20,
-    fordingDepth = 0.55,
-    max_vert_obstacle = 0.35,
-    max_acceleration = 4.2,
-    min_turn_radius = 5.8,
-
-    X_gear_1 = 1.7855,
-    Y_gear_1 = 0,
-    Z_gear_1 = 0.405,
-    X_gear_2 = -1.7855,
-    Y_gear_2 = 0,
-    Z_gear_2 = 0.405,
-
-    gear_type = GT_t.GEAR_TYPES.WHEELS,
-    r_max = 0.405,
-    armour_thickness = 0.002,
-}
-
 GT = {};
 GT_t.ws = 0;
 
+-- Start from a DCS-native wheeled chassis template so all required inherited
+-- tables exist before we override Tacoma-specific dimensions/performance.
 set_recursive_metatable(GT, GT_t.generic_wheel_vehicle);
-set_recursive_metatable(GT.chassis, GT_t.CH_t.TPG_TACOMA_RECON);
+set_recursive_metatable(GT.chassis, GT_t.CH_t.KAMAZ43101);
+
+GT.chassis.life = 4.0;
+GT.chassis.mass = 2500;
+GT.chassis.length = 5.728;
+GT.chassis.width = 1.895;
+GT.chassis.max_road_velocity = 50.5156; -- 113 mph / 181.856 km/h
+GT.chassis.max_slope = 0.55;
+GT.chassis.engine_power = 21000;
+GT.chassis.gear_count = 6;
+GT.chassis.canSwim = false;
+GT.chassis.canWade = true;
+GT.chassis.waterline_level = 0.20;
+GT.chassis.fordingDepth = 0.55;
+GT.chassis.max_vert_obstacle = 0.35;
+GT.chassis.max_acceleration = 4.2;
+GT.chassis.min_turn_radius = 5.8;
+GT.chassis.X_gear_1 = 1.7855;
+GT.chassis.Y_gear_1 = 0;
+GT.chassis.Z_gear_1 = 0.405;
+GT.chassis.X_gear_2 = -1.7855;
+GT.chassis.Y_gear_2 = 0;
+GT.chassis.Z_gear_2 = 0.405;
+GT.chassis.r_max = 0.405;
+GT.chassis.armour_thickness = 0.002;
 
 GT.visual.shape = "TPG_Tacoma_Recon";
 GT.visual.shape_dstr = "TPG_Tacoma_Recon_Destroyed";
-GT.visual.positioning = "BYNORMAL";
-
-GT.animation_arguments.wheels_rotation = 8;
-GT.animation_arguments.wheels_turn_angle = 9;
 
 GT.swing_on_run = false;
 GT.mobile = true;
 GT.Crew = 1;
-
 GT.armour_scheme = unarmed_armour_scheme;
 
-GT.visual.fire_size = 0.65;
-GT.visual.fire_pos = {0.0, 0.75, 0.0};
-GT.visual.fire_time = 420;
-GT.time_agony = 12;
+-- DCS native wheel arguments for wheeled vehicles.
+GT.animation_arguments.wheels_rotation = 8;
+GT.animation_arguments.wheels_turn_angle = 9;
 
--- Scout/recon role: unarmed visual observer vehicle.
 GT.sensor = {};
 set_recursive_metatable(GT.sensor, GT_t.SN_visual);
 GT.sensor.height = 1.75;
-GT.sensor.max_range_finding_target = 5000;
+
+GT.visual.fire_size = 0.65;
+GT.visual.fire_pos[1] = 0.0;
+GT.visual.fire_pos[2] = 0.75;
+GT.visual.fire_pos[3] = 0.0;
+GT.visual.fire_time = 420;
+GT.time_agony = 12;
 
 GT.driverViewPoint = {0.72, 1.55, -0.32};
 GT.CustomAimPoint = {0.0, 1.15, 0.0};
@@ -133,23 +125,16 @@ GT.DetectionRange = 5000;
 GT.ThreatRange = 0;
 GT.mapclasskey = "P0091000005";
 
+-- Use the same proven ME classification pattern as DCS unarmed trucks.
 GT.attribute = {
     wsType_Ground,
     wsType_Tank,
     wsType_NoWeapon,
     wsTypeKAMAZ_Tent,
     "Trucks",
-    "Unarmed",
-    "Scout",
-    "Reconnaissance",
 };
 
--- DCS ground-vehicle category list does not expose a dedicated Scout/Recon
--- top-level ME category, so this remains in the valid Unarmed category while
--- carrying explicit Scout/Recon attributes and DisplayName.
 GT.category = "Unarmed";
-
--- Keep the requested speed visible to the Mission Editor in km/h.
 GT.MaxSpeed = 181.856;
 
 add_surface_unit(GT);
