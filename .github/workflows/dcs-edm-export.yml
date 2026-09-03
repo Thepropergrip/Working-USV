@@ -7,6 +7,13 @@ on:
         description: "Path to EDM job JSON"
         required: false
         default: "edm-jobs/job.json"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/dcs-edm-export.yml"
+      - "tools/dcs-edm/**"
+      - "edm-jobs/**"
   push:
     paths:
       - ".github/workflows/dcs-edm-export.yml"
@@ -19,7 +26,7 @@ permissions:
 jobs:
   export-edm:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     env:
       BLENDER_VERSION: "4.1.1"
@@ -109,9 +116,45 @@ jobs:
           $out = Join-Path $env:GITHUB_WORKSPACE "edm-artifacts"
           New-Item -ItemType Directory -Force -Path $out | Out-Null
 
-          & $env:BLENDER_EXE --background --python "tools/dcs-edm/export_job.py" -- --job "$env:EDM_JOB_PATH" --artifact-dir "$out"
-          if ($LASTEXITCODE -ne 0) {
-            throw "Blender/EDM export failed with exit code $LASTEXITCODE"
+          $isRubble = ("${{ github.event_name }}" -eq "pull_request" -and "${{ github.head_ref }}" -eq "tpg-rubble-warzone-01")
+          if ($isRubble) {
+            $variants = @(
+              @{ variant = "intact";    output = "TPG_Warzone_Rubble_Pile_01.edm";            save = $true  },
+              @{ variant = "lod1";      output = "TPG_Warzone_Rubble_Pile_01_LOD1.edm";       save = $false },
+              @{ variant = "lod2";      output = "TPG_Warzone_Rubble_Pile_01_LOD2.edm";       save = $false },
+              @{ variant = "destroyed"; output = "TPG_Warzone_Rubble_Pile_01_Destroyed.edm";  save = $true  }
+            )
+
+            foreach ($v in $variants) {
+              $env:TPG_RUBBLE_VARIANT = $v.variant
+              $runtime = @{
+                mode = "script"
+                script = "edm-jobs/build_tpg_rubble_warzone_01.py"
+                output = $v.output
+                save_blend = $v.save
+              } | ConvertTo-Json
+              $jobPath = Join-Path $env:GITHUB_WORKSPACE ("edm-jobs\runtime-rubble-" + $v.variant + ".json")
+              Set-Content -Path $jobPath -Value $runtime -Encoding UTF8
+              Write-Host "Building TPG rubble variant: $($v.variant)"
+
+              & $env:BLENDER_EXE --background --python "tools/dcs-edm/export_job.py" -- --job "$jobPath" --artifact-dir "$out"
+              if ($LASTEXITCODE -ne 0) {
+                throw "TPG rubble EDM export failed for $($v.variant) with exit code $LASTEXITCODE"
+              }
+            }
+
+            & "edm-jobs/package_tpg_rubble_warzone_01.ps1"
+            if ($LASTEXITCODE -ne 0) { throw "TPG rubble packaging failed with exit code $LASTEXITCODE" }
+
+            $zip = Join-Path $out "TPG_Warzone_Rubble_Pile_01_DCS_DropIn.zip"
+            if (-not (Test-Path $zip)) { throw "Final rubble DCS package was not created." }
+            Get-Item $zip | ForEach-Object { Write-Host "FINAL RUBBLE PACKAGE: $($_.Name) $($_.Length) bytes" }
+          }
+          else {
+            & $env:BLENDER_EXE --background --python "tools/dcs-edm/export_job.py" -- --job "$env:EDM_JOB_PATH" --artifact-dir "$out"
+            if ($LASTEXITCODE -ne 0) {
+              throw "Blender/EDM export failed with exit code $LASTEXITCODE"
+            }
           }
 
           $edm = Get-ChildItem -Path $out -Filter *.edm -File
