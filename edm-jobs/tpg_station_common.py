@@ -640,6 +640,11 @@ def build_station(destroyed=False):
     build_price_sign(M)
     build_misc(M, detail=True)
 
+    # Localized livery overlays sit in front of the legacy modeled lettering.
+    # USA is baked as the base visual; DCS liveries swap only these sign textures.
+    from tpg_station_liveries import add_livery_overlays
+    add_livery_overlays()
+
     # Dedicated simplified collision objects embedded in the EDM.
     colmat=M["charcoal"]
     colliders=[
