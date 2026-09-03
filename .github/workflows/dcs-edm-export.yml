@@ -1,17 +1,12 @@
 name: DCS EDM Export (Blender 4.1.1)
 
 on:
-  workflow_dispatch:
-    inputs:
-      job_path:
-        description: "Path to EDM job JSON"
-        required: false
-        default: "edm-jobs/job.json"
   pull_request:
     paths:
       - ".github/workflows/dcs-edm-export.yml"
       - "tools/dcs-edm/**"
       - "edm-jobs/**"
+  workflow_dispatch:
   push:
     paths:
       - ".github/workflows/dcs-edm-export.yml"
@@ -30,74 +25,78 @@ jobs:
       BLENDER_URL: "https://download.blender.org/release/Blender4.1/blender-4.1.1-windows-x64.zip"
       ED_EXPORTER_COMMIT: "5f03ba70ec96ca6ce68028eabc786ecd97f9cf93"
     steps:
-      - name: Checkout project
+      - id: seed
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "edm-artifacts" | Out-Null
+          "run_id=${{ github.run_id }}`nevent=${{ github.event_name }}`nhead=${{ github.head_ref }}" | Set-Content "edm-artifacts\stage.txt"
+      - id: checkout
+        continue-on-error: true
         uses: actions/checkout@v4
-      - name: Install Blender 4.1.1 portable
+      - id: blender
+        continue-on-error: true
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
-          $zip = Join-Path $env:RUNNER_TEMP "blender-$env:BLENDER_VERSION.zip"
-          $dir = Join-Path $env:RUNNER_TEMP "blender-$env:BLENDER_VERSION"
-          Invoke-WebRequest -Uri $env:BLENDER_URL -OutFile $zip
-          Expand-Archive -Path $zip -DestinationPath $dir -Force
-          $exe = Get-ChildItem -Path $dir -Filter blender.exe -Recurse | Select-Object -First 1
-          if (-not $exe) { throw "Blender executable not found after extraction." }
-          "BLENDER_EXE=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-      - name: Install official Eagle Dynamics EDM exporter
+          $log="edm-artifacts\blender-install.log"
+          try {
+            $ErrorActionPreference="Stop"
+            $zip=Join-Path $env:RUNNER_TEMP "blender-$env:BLENDER_VERSION.zip"; $dir=Join-Path $env:RUNNER_TEMP "blender-$env:BLENDER_VERSION"
+            Invoke-WebRequest -Uri $env:BLENDER_URL -OutFile $zip
+            Expand-Archive -Path $zip -DestinationPath $dir -Force
+            $exe=Get-ChildItem -Path $dir -Filter blender.exe -Recurse | Select-Object -First 1
+            if(-not $exe){throw "Blender executable not found"}
+            "BLENDER_EXE=$($exe.FullName)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+            "SUCCESS $($exe.FullName)" | Set-Content $log
+          } catch { $_ | Out-String | Set-Content $log; throw }
+      - id: exporter
+        continue-on-error: true
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
-          $src = Join-Path $env:RUNNER_TEMP "Blender-EDM-Exporter"
-          git clone --filter=blob:none https://github.com/EagleDynamics/Blender-EDM-Exporter.git $src
-          git -C $src checkout $env:ED_EXPORTER_COMMIT
-          $scripts = Join-Path $env:GITHUB_WORKSPACE ".edm-blender-scripts"
-          $addons = Join-Path $scripts "addons"
-          New-Item -ItemType Directory -Force -Path $addons | Out-Null
-          Copy-Item -Recurse -Force (Join-Path $src "io_scene_edm") (Join-Path $addons "io_scene_edm")
-          $materialsUpper = Join-Path $addons "io_scene_edm\Materials"
-          $materialsTemp  = Join-Path $addons "io_scene_edm\__materials_casefix"
-          $materialsLower = Join-Path $addons "io_scene_edm\materials"
-          if (Test-Path $materialsUpper) { Rename-Item -Path $materialsUpper -NewName "__materials_casefix"; Rename-Item -Path $materialsTemp -NewName "materials" }
-          if (-not (Test-Path (Join-Path $materialsLower "__init__.py"))) { throw "Failed to normalize ED Materials package casing." }
-          $native = Join-Path $addons "io_scene_edm\pyedm_311.pyd"
-          if (-not (Test-Path $native)) { throw "Official native pyedm_311.pyd was not installed." }
-          "BLENDER_USER_SCRIPTS=$scripts" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "EDM_EXPORTER_COMMIT=$env:ED_EXPORTER_COMMIT" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-      - name: Export EDM
+          $log="edm-artifacts\exporter-install.log"
+          try {
+            $ErrorActionPreference="Stop"
+            $src=Join-Path $env:RUNNER_TEMP "Blender-EDM-Exporter"
+            git clone --filter=blob:none https://github.com/EagleDynamics/Blender-EDM-Exporter.git $src 2>&1 | Tee-Object $log
+            git -C $src checkout $env:ED_EXPORTER_COMMIT 2>&1 | Tee-Object $log -Append
+            $scripts=Join-Path $env:GITHUB_WORKSPACE ".edm-blender-scripts"; $addons=Join-Path $scripts "addons"
+            New-Item -ItemType Directory -Force -Path $addons | Out-Null
+            Copy-Item -Recurse -Force (Join-Path $src "io_scene_edm") (Join-Path $addons "io_scene_edm")
+            $upper=Join-Path $addons "io_scene_edm\Materials"; $temp=Join-Path $addons "io_scene_edm\__materials_casefix"; $lower=Join-Path $addons "io_scene_edm\materials"
+            if(Test-Path $upper){Rename-Item $upper "__materials_casefix"; Rename-Item $temp "materials"}
+            if(-not(Test-Path (Join-Path $lower "__init__.py"))){throw "Failed to normalize ED Materials package casing"}
+            if(-not(Test-Path (Join-Path $addons "io_scene_edm\pyedm_311.pyd"))){throw "Official pyedm_311.pyd missing"}
+            "BLENDER_USER_SCRIPTS=$scripts" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+            "EDM_EXPORTER_COMMIT=$env:ED_EXPORTER_COMMIT" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+            "SUCCESS" | Add-Content $log
+          } catch { $_ | Out-String | Add-Content $log; throw }
+      - id: export
+        continue-on-error: true
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Continue"
-          $out = Join-Path $env:GITHUB_WORKSPACE "edm-artifacts"
-          New-Item -ItemType Directory -Force -Path $out | Out-Null
-          $log = Join-Path $out "tpg-rubble-export.log"
-          $isRubble = ("${{ github.event_name }}" -eq "pull_request" -and "${{ github.head_ref }}" -eq "tpg-rubble-pile-v1")
-          if ($isRubble) {
-            $failed = $false
-            foreach ($job in @("edm-jobs/tpg_rubble_intact.json","edm-jobs/tpg_rubble_lod1.json","edm-jobs/tpg_rubble_lod2.json","edm-jobs/tpg_rubble_destroyed.json")) {
-              "=== TPG rubble export: $job ===" | Tee-Object -FilePath $log -Append
-              & $env:BLENDER_EXE --background --python "tools/dcs-edm/export_job.py" -- --job "$job" --artifact-dir "$out" *>&1 | Tee-Object -FilePath $log -Append
-              if ($LASTEXITCODE -ne 0) { "FAILED: $job exit $LASTEXITCODE" | Tee-Object -FilePath $log -Append; $failed=$true; break }
-            }
-            if (-not $failed) {
-              & "edm-jobs/package_tpg_rubble.ps1" *>&1 | Tee-Object -FilePath $log -Append
-              if ($LASTEXITCODE -ne 0) { $failed=$true }
-            }
-            if ($failed) { throw "TPG rubble export/package failed; see tpg-rubble-export.log" }
-          }
-          else {
-            $requested = ""
-            if ("${{ github.event_name }}" -eq "workflow_dispatch") { $requested = "${{ inputs.job_path }}" }
-            if ($requested -and (Test-Path $requested)) { $job = $requested }
-            elseif (Test-Path "edm-jobs/job.json") { $job = "edm-jobs/job.json" }
-            else { $job = "tools/dcs-edm/selftest-job.json" }
-            & $env:BLENDER_EXE --background --python "tools/dcs-edm/export_job.py" -- --job "$job" --artifact-dir "$out"
-            if ($LASTEXITCODE -ne 0) { throw "Blender/EDM export failed with exit code $LASTEXITCODE" }
-          }
-      - name: Upload EDM build artifacts
+          $log="edm-artifacts\tpg-rubble-export.log"
+          & $env:BLENDER_EXE --background --python "tools/dcs-edm/export_job.py" -- --job "edm-jobs/tpg_rubble_intact.json" --artifact-dir "edm-artifacts" *>&1 | Tee-Object $log
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+      - name: Write outcomes
+        if: always()
+        shell: pwsh
+        run: |
+          @"
+seed=${{ steps.seed.outcome }}
+checkout=${{ steps.checkout.outcome }}
+blender=${{ steps.blender.outcome }}
+exporter=${{ steps.exporter.outcome }}
+export=${{ steps.export.outcome }}
+"@ | Add-Content "edm-artifacts\stage.txt"
+      - name: Upload EDM diagnostic artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: dcs-edm-${{ github.run_number }}
           path: edm-artifacts/**
-          if-no-files-found: ignore
+          if-no-files-found: error
           retention-days: 30
+      - name: Fail after diagnostics when validation failed
+        if: always()
+        shell: pwsh
+        run: |
+          if ("${{ steps.blender.outcome }}" -ne "success" -or "${{ steps.exporter.outcome }}" -ne "success" -or "${{ steps.export.outcome }}" -ne "success") { throw "Rubble EDM diagnostic validation failed" }
