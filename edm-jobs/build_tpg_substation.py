@@ -30,10 +30,10 @@ def base():
     # It never shares a plane with DCS terrain, eliminating terrain/gravel z-fighting.
     box("YARD_GRAVEL",(0,0,-GRAVEL_CAP_THICK/2),(120,90,GRAVEL_CAP_THICK),M["gravel"],.0)
     # perimeter concrete curb / transformer containment pads
-    box("CTRL_PAD",(-39,-28,.10),(19,13,.20),M["concrete"],.03)
-    for x in (-20,20):
-        box(f"XFMR_PAD_{x}",(x,0,.18),(18,14,.36),M["concrete"],.05)
-        box(f"XFMR_BUND_{x}",(x,0,.31),(20,16,.22),M["concrete"],.02)
+    box("CTRL_PAD",(-41,-27,.10),(20,14,.20),M["concrete"],.03)
+    for i,(x,y) in enumerate(((-23,10),(22,-4)),1):
+        box(f"XFMR_PAD_{i}",(x,y,.18),(18,14,.36),M["concrete"],.05)
+        box(f"XFMR_BUND_{i}",(x,y,.31),(20,16,.22),M["concrete"],.02)
     # access road, irregular concrete service walks, and cable trench covers
     box("ACCESS_ROAD",(0,-35,.04),(110,9,.10),M["concrete"],.01)
     for x,y,l,w,ang in (
@@ -74,11 +74,11 @@ def fence():
     box("GATE_LEFT",(-7,-43.6,1.45),(13,.08,2.7),M["galv"],.01)
     box("GATE_RIGHT",(7,-43.6,1.45),(13,.08,2.7),M["galv"],.01)
     if DETAIL>=2:
-        text_obj("DANGER  HIGH VOLTAGE","GATE_WARNING",(0,-43.642,1.65),.34,M["red"])
+        # One proper warning placard on each gate leaf; nothing bridges the center split.
+        danger_sign("GATE_WARN_LEFT",(-7.0,-43.647,1.55),M,width=1.85,height=.92)
+        danger_sign("GATE_WARN_RIGHT",(7.0,-43.647,1.55),M,width=1.85,height=.92)
         for i,x in enumerate((-44,-28,-12,12,28,44)):
-            box(f"FENCE_SIGN_{i}",(x,-43.524,1.45),(1.55,.003,.78),M["white"],.0)
-            text_obj("DANGER",f"FENCE_SIGN_TEXT_{i}",(x,-43.526,1.61),.16,M["red"])
-            text_obj("HIGH VOLTAGE",f"FENCE_SIGN_SUB_{i}",(x,-43.526,1.34),.09,M["black"])
+            danger_sign(f"FENCE_SIGN_{i}",(x,-43.535,1.45),M,width=1.55,height=.78)
 
 def control_building():
     # Brick relay/control house and foreground service buildings match the locked reference composition.
@@ -101,8 +101,11 @@ def control_building():
     box("CTRL_WINDOWFRAME",(x-2.6,y-6.14,2.55),(3.28,.035,1.82),M["galv"],.010)
     for lx in (x-6.4,x+1.4,x+7.4):
         box(f"CTRL_WALL_LIGHT_{lx}",(lx,y-6.18,3.6),(.42,.25,.28),M["black"],.025)
-    text_obj("SUBSTATION CONTROL","CTRL_LABEL",(x,y-6.002,4.42),.38,M["white"])
-    text_obj("AUTHORIZED PERSONNEL ONLY","CTRL_WARN",(x+4.1,y-6.002,.58),.17,M["yellow"])
+    equipment_label("CTRL_LABEL",(x,y-6.074,4.42),M,"SUBSTATION CONTROL",
+                    width=4.8,height=.62,text_size=.30,plate="steel",ink="white")
+    sign_plate("CTRL_AUTH",(x+4.1,y-6.074,.82),2.7,.72,M["white"],
+               "AUTHORIZED",M["red"],M,text_size=.16,depth=.006,
+               subtext="PERSONNEL ONLY",subtext_mat=M["black"],subtext_size=.095)
     if DETAIL>=1:
         for i,dx in enumerate((-7.0,-5.0,-3.0)):
             box(f"CTRL_EXT_PANEL_{i}",(x+dx,y-6.18,1.18),(1.25,.34,2.2),M["galv"],.025)
@@ -129,7 +132,7 @@ def control_building():
         box(f"UTILITY_CAB_{i}",(cx,cy,1.25),(3.0,2.0,2.5),mat,.05)
         box(f"UTILITY_CAB_DOOR_{i}",(cx,cy-1.02,1.30),(2.45,.035,2.10),M["galv"] if i==2 else M["steel"],.012)
         if DETAIL>=2:
-            text_obj("DANGER",f"UTILITY_WARN_{i}",(cx,cy-1.0395,1.75),.15,M["yellow"])
+            danger_sign(f"UTILITY_WARN_{i}",(cx,cy-1.024,1.72),M,width=.88,height=.46)
 
 
 def transformer(cx,cy,idx,damaged=False):
@@ -164,21 +167,24 @@ def transformer(cx,cy,idx,damaged=False):
         bx=cx+dx; by=cy-.6
         insulator_stack(f"XF{idx}_HV_BUSH_{i}",(bx,by,z+7.2),3.0,M,DETAIL,brown=True)
         if DETAIL>=1: torus(f"XF{idx}_CORONA_{i}",(bx,by,z+8.55),.34,.035,M["alum"],major_segments=18)
-        text_obj(("A","B","C")[i],f"XF{idx}_PHASE_{i}",(bx,cy-2.352,z+4.7),.24,M["white"])
+        equipment_label(f"XF{idx}_PHASE_{i}",(bx,cy-2.354,z+4.7),M,("A","B","C")[i],
+                        width=.42,height=.34,text_size=.20,plate="blue",ink="white")
     for i,dx in enumerate((-2.7,-.9,.9,2.7)):
         insulator_stack(f"XF{idx}_LV_BUSH_{i}",(cx+dx,cy+1.0,z+6.65),1.85,M,DETAIL,brown=False)
     # gauges, nameplate, drain, grounding straps
-    box(f"XF{idx}_NAMEPLATE",(cx,cy-2.3515,z+2.65),(2.15,.003,1.05),M["white"],.0)
-    text_obj(f"TPG GRID  T-{idx}\nPOWER TRANSFORMER",f"XF{idx}_NPTEXT",(cx,cy-2.354,z+2.72),.18,M["black"])
+    sign_plate(f"XF{idx}_NAMEPLATE",(cx,cy-2.354,z+2.65),2.15,1.05,M["white"],
+               f"TPG GRID  T-{idx}",M["black"],M,text_size=.17,depth=.006,
+               subtext="POWER TRANSFORMER",subtext_mat=M["black"],subtext_size=.11)
     if DETAIL>=2:
         for gi,gx in enumerate((-1.1,0,1.1)):
             cyl(f"XF{idx}_GAUGE_{gi}",(cx+gx,cy-2.47,z+1.55),.26,.08,M["white"],20,rot=(math.radians(90),0,0))
             cyl(f"XF{idx}_GAUGEHUB_{gi}",(cx+gx,cy-2.52,z+1.55),.035,.06,M["black"],10,rot=(math.radians(90),0,0))
         cyl(f"XF{idx}_DRAIN",(cx+3.55,cy-2.5,z+.55),.15,.55,M["steel"],14,rot=(math.radians(90),0,0))
         cable(f"XF{idx}_GROUND",[(cx-3.6,cy+2.4,z+.4),(cx-4.0,cy+3.0,.2)],M["copper"],.035)
-        # service/warning decals
-        text_obj("DANGER","XF{}_DANGER".format(idx),(cx+2.6,cy-2.352,z+4.0),.22,M["red"])
-        text_obj("OIL FILLED","XF{}_OIL".format(idx),(cx-2.7,cy-2.352,z+.85),.16,M["yellow"])
+        # service/warning placards with flat printed graphics
+        danger_sign(f"XF{idx}_DANGER",(cx+2.55,cy-2.354,z+4.0),M,width=1.25,height=.64)
+        equipment_label(f"XF{idx}_OIL",(cx-2.65,cy-2.354,z+.85),M,"OIL FILLED",
+                        width=1.15,height=.38,text_size=.12,plate="yellow",ink="black")
     if damaged:
         # rupture, scorch and hanging conductor cues
         box(f"XF{idx}_SCORCH",(cx,cy-2.41,z+3.2),(6.5,.05,3.0),M["soot"],.005)
@@ -203,7 +209,8 @@ def breaker(name,x,y):
         insulator_stack(f"{name}_INS_R_{p}",(x+dx+.30,y,3.75),1.95,M,DETAIL)
         if DETAIL>=2:
             box(f"{name}_MECH_{p}",(x+dx,y-.70,1.15),(.78,.54,.92),M["galv"],.025)
-            text_obj(("A","B","C")[p],f"{name}_PH_{p}",(x+dx,y-.972,1.35),.20,M["blue"])
+            equipment_label(f"{name}_PH_{p}",(x+dx,y-.974,1.35),M,("A","B","C")[p],
+                            width=.34,height=.30,text_size=.17,plate="blue",ink="white")
 
 def disconnect(name,x,y,z=5.0,open_phase=False):
     # elevated three-pole air-break disconnector
@@ -262,7 +269,8 @@ def switchyard():
         if DETAIL>=1:
             # local marshalling kiosk, cable conduit and bay ID
             box(f"MK_{i}",(x+3.0,10.0,1.0),(1.25,.85,2.0),M["galv"],.03)
-            text_obj(f"BAY {i+1:02d}",f"BAYLBL_{i}",(x+3.0,9.573,1.25),.16,M["black"])
+            equipment_label(f"BAYLBL_{i}",(x+3.0,9.572,1.25),M,f"BAY {i+1:02d}",
+                            width=.92,height=.34,text_size=.12,plate="white",ink="black")
             cable(f"MKCONDUIT_{i}",[(x+3.0,10.0,.1),(x+3.0,7.0,.08),(x,6.0,.08)],M["steel"],.035)
 
 def towers_and_lines():
@@ -277,7 +285,8 @@ def towers_and_lines():
         # shield wire and tower labels
         for x in (-32,0,32):
             cable(f"SHIELD_{x}",[(x,36,18.2),(x,28,16.0),(x,20,12.0)],M["steel"],.028)
-            text_obj(f"L{x:+03d}",f"TOWER_ID_{x}",(x,34.998,3.0),.22,M["white"])
+            equipment_label(f"TOWER_ID_{x}",(x,34.995,3.0),M,f"L{x:+03d}",
+                            width=.90,height=.42,text_size=.15,plate="steel",ink="white")
 
 def yard_details():
     if DETAIL==0: return
@@ -296,8 +305,8 @@ def yard_details():
         # dense little ID plates / stickers
         for i,x in enumerate(range(-44,45,8)):
             box(f"IDPOST_{i}",(x,25,.65),(.06,.06,1.3),M["galv"],.004)
-            box(f"IDPLATE_{i}",(x,24.9685,1.0),(.65,.003,.35),M["white"],.0)
-            text_obj(f"{100+i}",f"IDTEXT_{i}",(x,24.966,1.0),.12,M["black"])
+            equipment_label(f"IDPLATE_{i}",(x,24.968,1.0),M,f"{100+i}",
+                            width=.65,height=.35,text_size=.11,plate="white",ink="black")
 
 def lift_yard_objects():
     # Everything except the tapered foundation is authored relative to the old yard
