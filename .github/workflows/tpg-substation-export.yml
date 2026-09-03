@@ -116,7 +116,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           & "edm-jobs/package_tpg_substation.ps1"
-          if ($LASTEXITCODE -ne 0) { throw "Packaging failed." }
+          if (-not $?) { throw "Packaging failed." }
           $zip = "edm-artifacts\TPG_Electrical_Substation_V1.0_DCS_DropIn.zip"
           if (-not (Test-Path $zip)) { throw "Final DCS ZIP missing." }
           Get-Item $zip | ForEach-Object { Write-Host "FINAL PACKAGE: $($_.FullName) $($_.Length) bytes" }
