@@ -59,6 +59,39 @@ def _ibeam(name, loc, length, rot, mat):
         cube(f'{name}_{i}', _local(loc, off, rot), dims, mat, rot=rot, bevel=.010)
 
 
+def _fractured_slab(name, loc, length, width, thick, rot, face_mat, fracture_mat, rng):
+    # Jagged reinforced-concrete slab with distinct exposed-aggregate fracture faces.
+    base = [
+        (-.50,-.42),(-.18,-.53),(.18,-.48),(.50,-.34),
+        (.54,.04),(.42,.46),(.05,.53),(-.34,.45),(-.53,.15),
+    ]
+    ring = []
+    for x,y in base:
+        ring.append((
+            x*length + rng.uniform(-.045,.045)*length,
+            y*width + rng.uniform(-.045,.045)*width,
+        ))
+    n = len(ring)
+    verts = [(x,y,+thick*.5) for x,y in ring] + [(x,y,-thick*.5) for x,y in ring]
+    faces = [tuple(range(n)), tuple(reversed(range(n,2*n)))]
+    for i in range(n):
+        j=(i+1)%n
+        faces.append((i,j,n+j,n+i))
+    mesh=bpy.data.meshes.new(name+'_mesh')
+    mesh.from_pydata(verts,[],faces)
+    mesh.update()
+    mesh.materials.append(face_mat)
+    mesh.materials.append(fracture_mat)
+    for idx,p in enumerate(mesh.polygons):
+        p.material_index = 0 if idx < 2 else 1
+    obj=bpy.data.objects.new(name,mesh)
+    bpy.context.collection.objects.link(obj)
+    obj.location=loc
+    obj.rotation_euler=rot
+    _box_uv(obj,.62)
+    return obj
+
+
 def _corrugated(name, loc, length, width, rot, mat, bend=.08, ribs=11):
     nx, ny = 4, ribs + 1
     verts = []
@@ -154,6 +187,28 @@ def quality_pass(variant='intact', detail=2):
                 rot = (rot[0]+.12, rot[1]-.10, rot[2]+.20)
             _cmu(f'TPG_RUB_CMU_Q{i}', (x,y,z), rot, M, broken=(i in (2,6,8)))
 
+    if detail >= 1:
+        anchor_slabs = [
+            ((-.35,.20,1.08), 1.70,1.05,.18, (.22,-.30,.40)),
+            ((1.18,-.48,.68), 1.35,.82,.16, (-.32,.24,-.82)),
+            ((-1.42,.82,.54), 1.12,.76,.15, (.28,.18,1.08)),
+            ((.32,-1.45,.40), .95,.66,.14, (-.16,.34,.55)),
+        ]
+        if detail == 1:
+            anchor_slabs = anchor_slabs[:2]
+        for i,(loc,L,W,T,rot) in enumerate(anchor_slabs):
+            if variant == 'destroyed':
+                loc=(loc[0]*1.06,loc[1]*1.08,loc[2]*.74)
+                rot=(rot[0]+.12,rot[1]-.10,rot[2]+.18)
+            _fractured_slab(f'TPG_RUB_FRACTURED_SLAB_Q{i}',loc,L,W,T,rot,M['concrete2'],M['aggregate'],rng)
+            # Rebar emerges from the broken edge, visually tying the steel to concrete.
+            bars = 3 if detail == 2 and i < 2 else 1
+            for k in range(bars):
+                edge_local=(L*(.40+rng.uniform(-.05,.05)), W*(-.22+k*.18), rng.uniform(-.015,.045))
+                p=_local(loc,edge_local,rot)
+                qend=p + Euler(rot,'XYZ').to_matrix() @ Vector((rng.uniform(.28,.58),rng.uniform(-.12,.12),rng.uniform(.08,.32)))
+                rebar(f'TPG_RUB_ANCHOR_REBAR_{i}_{k}',tuple(p),tuple(qend),M['rust'],rng.uniform(.016,.023))
+
     _delete_prefix('TPG_RUB_METAL_')
     if detail >= 1:
         beams = [
@@ -201,5 +256,5 @@ def quality_pass(variant='intact', detail=2):
     for o in bpy.context.scene.objects:
         ensure_uv(o)
 
-    bpy.context.scene['TPG_quality_pass'] = 'reference-driven-v1.1'
+    bpy.context.scene['TPG_quality_pass'] = 'reference-driven-v1.2'
     bpy.context.scene['TPG_nominal_footprint_m'] = '6.10 x 6.10'
