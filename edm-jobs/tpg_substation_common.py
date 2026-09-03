@@ -13,30 +13,53 @@ from objects_custom_props import get_edm_props
 MAT_DESCS = build_material_descriptions()
 MATS = {}
 
-def _tex(name, base, variation=0.03, streak=False, soot=False, size=512):
+def _tex(name, base, variation=0.03, streak=False, soot=False, size=1024):
     path = TEXDIR / (name + ".png")
     if path.exists():
         return path
     img = bpy.data.images.new(name, width=size, height=size, alpha=True)
-    rng = random.Random(zlib.crc32(name.encode("utf-8")) & 0xffffffff)
-    stains = []
-    if soot:
-        for _ in range(18):
-            stains.append((rng.random(), rng.random(), rng.uniform(.04,.22), rng.uniform(.04,.18), rng.uniform(.35,.82)))
+    seed=zlib.crc32(name.encode("utf-8")) & 0xffffffff
+    rng = random.Random(seed)
+    phase1=rng.uniform(0,math.tau); phase2=rng.uniform(0,math.tau); phase3=rng.uniform(0,math.tau)
+    stains=[]
+    for _ in range(28 if soot else 7):
+        stains.append((rng.random(),rng.random(),rng.uniform(.025,.18),rng.uniform(.025,.16),
+                       rng.uniform(.08,.72) if soot else rng.uniform(.015,.07)))
     px=[]
+    inv=max(1,size-1)
+    is_gravel="Gravel" in name
+    is_concrete="Concrete" in name or "BrickMortar" in name
+    is_galv="Galvanized" in name
+    is_porcelain="Porcelain" in name
     for y in range(size):
+        v=y/inv
         for x in range(size):
-            n=(rng.random()-.5)*variation
+            u=x/inv
+            # Three spatial frequencies prevent the old uniform/random-pixel look.
+            broad=(math.sin(u*math.tau*2.7+phase1)+math.sin(v*math.tau*2.1+phase2))*.25
+            mid=math.sin((u*9.7+v*7.3)*math.tau+phase3)*.22
+            fine=(rng.random()-.5)
+            n=variation*(broad*.55+mid*.28+fine*.38)
             if streak:
-                n += .012*math.sin(y*.14) + .008*math.sin(x*.07+y*.03)
+                n += .010*math.sin(v*math.tau*18+phase2)+.006*math.sin((u*.7+v)*math.tau*31+phase1)
+            if is_galv:
+                n += .018*math.sin((u*21.0+v*13.0)*math.tau+phase1)*math.sin((u*7.0-v*11.0)*math.tau+phase2)
+            if is_porcelain:
+                n *= .28
+                n += .004*math.sin(v*math.tau*34+phase3)
+            if is_concrete:
+                n += (rng.random()-.5)*.018
+            if is_gravel:
+                speck=rng.random()
+                if speck>.965: n += rng.uniform(.035,.10)
+                elif speck<.035: n -= rng.uniform(.025,.075)
             dark=0.0
-            if soot:
-                u=x/max(1,size-1); v=y/max(1,size-1)
-                for cx,cy,rx,ry,p in stains:
-                    dx=(u-cx)/rx; dy=(v-cy)/ry
-                    d=dx*dx+dy*dy
-                    if d<1.0: dark=max(dark,p*(1.0-d)**2)
-                if rng.random()>.992: dark=max(dark,rng.uniform(.12,.44))
+            for cx,cy,rx,ry,p in stains:
+                dx=(u-cx)/rx; dy=(v-cy)/ry
+                d=dx*dx+dy*dy
+                if d<1.0:
+                    dark=max(dark,p*(1.0-d)**2)
+            if not soot: dark*=.18
             px.extend((
                 max(0,min(1,(base[0]+n)*(1-dark))),
                 max(0,min(1,(base[1]+n)*(1-dark))),
@@ -55,8 +78,18 @@ def edm_mat(name,color,rough=.7,metal=0.0,variation=.03,streak=False,soot=False)
     m.node_tree.links.new(tex.outputs["Color"],group.inputs[NodeSocketInDefaultEnum.BASE_COLOR])
     rmo_path=TEXDIR/(name+"_RoughMet.png")
     if not rmo_path.exists():
-        img=bpy.data.images.new(name+"_RoughMet",width=8,height=8,alpha=True)
-        img.pixels=[1.0,rough,metal,1.0]*64
+        rsz=256
+        img=bpy.data.images.new(name+"_RoughMet",width=rsz,height=rsz,alpha=True)
+        rr=random.Random((zlib.crc32((name+"_rmo").encode("utf-8")) & 0xffffffff))
+        rp=[]
+        for y in range(rsz):
+            for x in range(rsz):
+                u=x/(rsz-1); v=y/(rsz-1)
+                wave=.5*math.sin((u*4.1+v*3.3)*math.tau)+.25*math.sin((u*13.0-v*9.0)*math.tau)
+                rv=max(.04,min(.99,rough + wave*.028 + (rr.random()-.5)*.035))
+                mv=max(0.0,min(1.0,metal + (rr.random()-.5)*(.025 if metal>.1 else .004)))
+                rp.extend((1.0,rv,mv,1.0))
+        img.pixels=rp
         img.filepath_raw=str(rmo_path); img.file_format="PNG"; img.save()
     rmo=m.node_tree.nodes.new("ShaderNodeTexImage")
     rmo.image=bpy.data.images.load(str(rmo_path),check_existing=True)
@@ -100,29 +133,47 @@ def box(name,loc,scale,mat,bevel=.04,rot=(0,0,0),coll=False):
     o=bpy.context.object; o.name=name; o.dimensions=scale
     bpy.ops.object.transform_apply(location=False,rotation=False,scale=True)
     if bevel:
-        mod=o.modifiers.new("edge_soften","BEVEL"); mod.width=bevel; mod.segments=2
+        mod=o.modifiers.new("edge_soften","BEVEL"); mod.width=bevel; mod.segments=4
         bpy.context.view_layer.objects.active=o; bpy.ops.object.modifier_apply(modifier=mod.name)
     if mat: o.data.materials.append(mat)
     if coll: get_edm_props(o).SPECIAL_TYPE="COLLISION_SHELL"
     return o
 
 def cyl(name,loc,radius,depth,mat,verts=16,rot=(0,0,0),coll=False):
+    if not coll:
+        if radius >= .45: verts=max(verts,48)
+        elif radius >= .12: verts=max(verts,36)
+        else: verts=max(verts,24)
     bpy.ops.mesh.primitive_cylinder_add(vertices=verts,radius=radius,depth=depth,location=loc,rotation=rot)
     o=bpy.context.object; o.name=name
+    if not coll:
+        # Smooth only barrel faces; preserve physically flat end caps.
+        for p in o.data.polygons:
+            p.use_smooth = abs(p.normal.z) < .90
+        if radius >= .10 and depth >= .10:
+            bev=o.modifiers.new("machined_edge","BEVEL")
+            bev.width=min(.018,max(.004,radius*.035))
+            bev.segments=3
+            bpy.context.view_layer.objects.active=o
+            bpy.ops.object.modifier_apply(modifier=bev.name)
     if mat: o.data.materials.append(mat)
     if coll: get_edm_props(o).SPECIAL_TYPE="COLLISION_SHELL"
     return o
 
 def sphere(name,loc,r,mat,seg=16,rings=8):
+    seg=max(seg,40); rings=max(rings,20)
     bpy.ops.mesh.primitive_uv_sphere_add(segments=seg,ring_count=rings,radius=r,location=loc)
     o=bpy.context.object; o.name=name
+    for p in o.data.polygons: p.use_smooth=True
     if mat:o.data.materials.append(mat)
     return o
 
 def torus(name,loc,major,minor,mat,rot=(0,0,0),major_segments=20,minor_segments=8):
+    major_segments=max(major_segments,48); minor_segments=max(minor_segments,12)
     bpy.ops.mesh.primitive_torus_add(major_radius=major,minor_radius=minor,major_segments=major_segments,
         minor_segments=minor_segments,location=loc,rotation=rot)
     o=bpy.context.object;o.name=name
+    for p in o.data.polygons: p.use_smooth=True
     if mat:o.data.materials.append(mat)
     return o
 
@@ -258,7 +309,7 @@ def foundation_bed(name,top_z=.3972,bottom_z=-.18,top_size=(120.0,90.0),bottom_s
     return o
 
 def cable(name,pts,mat,radius=.022,res=1):
-    c=bpy.data.curves.new(name+"_curve","CURVE"); c.dimensions="3D"; c.bevel_depth=radius; c.bevel_resolution=res
+    c=bpy.data.curves.new(name+"_curve","CURVE"); c.dimensions="3D"; c.resolution_u=max(3,res+2); c.bevel_depth=radius; c.bevel_resolution=max(3,res+2); c.resolution_v=2
     s=c.splines.new("BEZIER"); s.bezier_points.add(len(pts)-1)
     for bp,p in zip(s.bezier_points,pts):
         bp.co=p; bp.handle_left_type="AUTO"; bp.handle_right_type="AUTO"
@@ -290,13 +341,13 @@ def insulator_stack(name,loc,height,M,detail=2,brown=False):
 
     if detail>=2:
         sheds=full_sheds
-        seg=24
+        seg=48
     elif detail==1:
         sheds=max(5,int(round(full_sheds*.72)))
-        seg=16
+        seg=32
     else:
         sheds=max(3,int(round(full_sheds*.46)))
-        seg=10
+        seg=16
 
     cap_h=min(.16,max(.10,height*.045))
     z_bottom=loc[2]-height/2
@@ -323,12 +374,14 @@ def insulator_stack(name,loc,height,M,detail=2,brown=False):
         profile.extend([
             (base+step*.16,core_r),
             (base+step*.23,core_r*1.10),
-            (base+step*.31,sr*.58),
-            (base+step*.39,sr*.90),
+            (base+step*.29,sr*.48),
+            (base+step*.35,sr*.72),
+            (base+step*.40,sr*.92),
             (base+step*.44,sr),
-            (base+step*.49,sr*.98),
-            (base+step*.55,sr*.67),
-            (base+step*.61,core_r*1.22),
+            (base+step*.48,sr*.995),
+            (base+step*.52,sr*.88),
+            (base+step*.57,sr*.62),
+            (base+step*.62,core_r*1.22),
             (base+step*.72,core_r),
             (base+step*.92,core_r),
         ])
@@ -391,7 +444,7 @@ def insulator_stack(name,loc,height,M,detail=2,brown=False):
     # Cast/galvanized mounting hardware like real station-post and transformer bushings.
     flange_r=max(core_r*1.75,shed_r*.56)
     neck_r=core_r*1.28
-    verts_hw=20 if detail>=2 else (14 if detail==1 else 10)
+    verts_hw=36 if detail>=2 else (24 if detail==1 else 16)
     cyl(name+"_BASE_FLANGE",(loc[0],loc[1],z_bottom+cap_h*.28),flange_r,cap_h*.34,M["galv"],verts_hw)
     cyl(name+"_BASE_NECK",(loc[0],loc[1],z_bottom+cap_h*.66),neck_r,cap_h*.78,M["galv"],verts_hw)
     cyl(name+"_TOP_NECK",(loc[0],loc[1],z_top-cap_h*.66),neck_r,cap_h*.78,M["galv"],verts_hw)
