@@ -117,4 +117,6 @@ $zip = Join-Path $root "TPG_Rubble_Pile_20ft_V1_DCS_DropIn.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }
 Compress-Archive -Path $pkg -DestinationPath $zip -CompressionLevel Optimal
 if (-not (Test-Path $zip)) { throw "Package ZIP was not created" }
-Write-Host "Packaged $zip"
+& (Join-Path $env:GITHUB_WORKSPACE "edm-jobs\validate_tpg_rubble_package.ps1") -ZipPath $zip
+if ($LASTEXITCODE -ne 0) { throw "Final rubble package validation failed." }
+Write-Host "Packaged and validated $zip"
