@@ -101,6 +101,7 @@ def materials():
     })
     return M
 
+
 def box(name, loc, scale, material, bevel=.03, rot=(0,0,0), coll=False):
     bpy.ops.mesh.primitive_cube_add(size=1.0, location=loc, rotation=rot)
     o = bpy.context.object
@@ -110,9 +111,14 @@ def box(name, loc, scale, material, bevel=.03, rot=(0,0,0), coll=False):
     if bevel > 0:
         mod = o.modifiers.new("edge_soften", "BEVEL")
         mod.width = bevel
-        mod.segments = 2 if LOD < 2 else 1
+        mod.segments = 5 if LOD == 0 else (3 if LOD == 1 else 1)
+        mod.limit_method = "ANGLE"
+        mod.angle_limit = math.radians(22)
         bpy.context.view_layer.objects.active = o
-        bpy.ops.object.modifier_apply(modifier=mod.name)
+        try:
+            bpy.ops.object.modifier_apply(modifier=mod.name)
+        except:
+            pass
     if material:
         o.data.materials.append(material)
     if coll:
@@ -151,22 +157,27 @@ def sphere(name, loc, radius, material, parent=None, seg=20, rings=10):
         o.parent = parent
     return o
 
+
 def tube(name, pts, radius, material, bevel_res=2):
     c = bpy.data.curves.new(name+"_curve","CURVE")
     c.dimensions = "3D"
     c.bevel_depth = radius
     c.bevel_resolution = bevel_res
-    s = c.splines.new("POLY")
-    s.points.add(len(pts)-1)
-    for p, co in zip(s.points, pts):
-        p.co = (co[0],co[1],co[2],1.0)
+    s = c.splines.new("BEZIER")
+    s.bezier_points.add(len(pts)-1)
+    for bp, co in zip(s.bezier_points, pts):
+        bp.co = co
+        bp.handle_left_type = "AUTO"
+        bp.handle_right_type = "AUTO"
     o = bpy.data.objects.new(name,c)
     bpy.context.collection.objects.link(o)
     o.data.materials.append(material)
     bpy.context.view_layer.objects.active=o
     o.select_set(True)
     bpy.ops.object.convert(target="MESH")
-    return bpy.context.object
+    o = bpy.context.object
+    o.select_set(False)
+    return o
 
 def text_obj(text, name, loc, size, material, rot=(math.radians(90),0,0), align="CENTER"):
     c = bpy.data.curves.new(name+"_curve","FONT")
@@ -186,9 +197,10 @@ def text_obj(text, name, loc, size, material, rot=(math.radians(90),0,0), align=
     bpy.ops.object.convert(target="MESH")
     return bpy.context.object
 
+
 def action_rot(obj, arg, axis, neg_angle, pos_angle):
     obj.rotation_mode = "XYZ"
-    act = bpy.data.actions.new(f"{arg} {obj.name}")
+    act = bpy.data.actions.new(f"{arg}_{obj.name}")
     obj.animation_data_create()
     obj.animation_data.action = act
     for frame, ang in ((0,neg_angle),(100,0.0),(200,pos_angle)):
@@ -196,7 +208,10 @@ def action_rot(obj, arg, axis, neg_angle, pos_angle):
         vals[axis] = ang
         obj.rotation_euler = vals
         obj.keyframe_insert(data_path="rotation_euler", frame=frame)
-    obj.rotation_euler = (0.0,0.0,0.0)
+    for fc in act.fcurves:
+        for kp in fc.keyframe_points:
+            kp.interpolation = "LINEAR"
+    bpy.context.scene.frame_set(100)
 
 def parent_keep(child, parent):
     mw = child.matrix_world.copy()
@@ -213,284 +228,347 @@ def arch_flare(name, wheel_x, side_y, zc, material):
         pts.append((x, side_y, z))
     return tube(name, pts, .055 if LOD==0 else .065, material, 2 if LOD==0 else 1)
 
+
+# ----------------------------- V2 geometry helpers -----------------------------
+def mesh_obj(name, verts, faces, material=None, bevel=0.0, coll=False):
+    me = bpy.data.meshes.new(name+"_mesh")
+    me.from_pydata(verts, [], faces)
+    me.update(calc_edges=True)
+    o = bpy.data.objects.new(name, me)
+    bpy.context.collection.objects.link(o)
+    if material:
+        me.materials.append(material)
+    if bevel > 0:
+        mod=o.modifiers.new("edge_soften","BEVEL")
+        mod.width=bevel
+        mod.segments=4 if LOD==0 else 2
+        mod.limit_method="ANGLE"
+        bpy.context.view_layer.objects.active=o
+        try: bpy.ops.object.modifier_apply(modifier=mod.name)
+        except: pass
+    if coll:
+        get_edm_props(o).SPECIAL_TYPE="COLLISION_SHELL"
+    return o
+
+def loft_sections(name, sections, material, bevel=.0):
+    verts=[]; faces=[]; n=8
+    for x,w,zb,zt,cy,cz in sections:
+        cy=min(cy,w*.42); cz=min(cz,(zt-zb)*.33)
+        ring=[(-w+cy,zb),(w-cy,zb),(w,zb+cz),(w,zt-cz),
+              (w-cy,zt),(-w+cy,zt),(-w,zt-cz),(-w,zb+cz)]
+        verts.extend((x,y,z) for y,z in ring)
+    for i in range(len(sections)-1):
+        a=i*n; b=(i+1)*n
+        for j in range(n):
+            faces.append((a+j,a+(j+1)%n,b+(j+1)%n,b+j))
+    faces.append(tuple(range(n-1,-1,-1)))
+    off=(len(sections)-1)*n
+    faces.append(tuple(off+j for j in range(n)))
+    return mesh_obj(name,verts,faces,material,bevel)
+
+def prism_x(name,x0,x1,yz,material,bevel=.008):
+    n=len(yz)
+    verts=[(x0,y,z) for y,z in yz]+[(x1,y,z) for y,z in yz]
+    faces=[tuple(range(n-1,-1,-1)),tuple(n+i for i in range(n))]
+    for i in range(n):
+        faces.append((i,(i+1)%n,n+(i+1)%n,n+i))
+    return mesh_obj(name,verts,faces,material,bevel)
+
+def prism_y(name,y0,y1,xz,material,bevel=.006):
+    n=len(xz)
+    verts=[(x,y0,z) for x,z in xz]+[(x,y1,z) for x,z in xz]
+    faces=[tuple(range(n-1,-1,-1)),tuple(n+i for i in range(n))]
+    for i in range(n):
+        faces.append((i,(i+1)%n,n+(i+1)%n,n+i))
+    return mesh_obj(name,verts,faces,material,bevel)
+
+def boolean_wheel_well(body,x,r=.485):
+    bpy.ops.mesh.primitive_cylinder_add(vertices=64 if LOD==0 else 32,
+        radius=r, depth=2.4, location=(x,0,WHEEL_R),
+        rotation=(math.radians(90),0,0))
+    cut=bpy.context.object
+    mod=body.modifiers.new("wheelwell","BOOLEAN")
+    mod.operation="DIFFERENCE"
+    mod.solver="EXACT"
+    mod.object=cut
+    bpy.context.view_layer.objects.active=body
+    try: bpy.ops.object.modifier_apply(modifier=mod.name)
+    except: pass
+    bpy.data.objects.remove(cut,do_unlink=True)
+
+def spoke_prism(name, center, side, a, material):
+    x0,y0,z0=center
+    ux,uz=math.cos(a),math.sin(a)
+    tx,tz=-uz,ux
+    r0,r1=.072,.178
+    w0,w1=.028,.046
+    p=[(x0+r0*ux+w0*tx,z0+r0*uz+w0*tz),
+       (x0+r1*ux+w1*tx,z0+r1*uz+w1*tz),
+       (x0+r1*ux-w1*tx,z0+r1*uz-w1*tz),
+       (x0+r0*ux-w0*tx,z0+r0*uz-w0*tz)]
+    yf=y0-side*.150
+    return prism_y(name,yf-side*.010,yf+side*.010,p,material,.003)
+# -------------------------------------------------------------------------------
+
+
 def wheel(prefix, x, side):
-    y = side*(WIDTH/2 + .005)
+    y = side*(WIDTH/2 + .008)
     z = WHEEL_R
-    steer = bpy.data.objects.new(prefix+"_STEER", None)
-    steer.location = (x,y,z)
+    steer=bpy.data.objects.new(prefix+"_STEER",None)
+    steer.location=(x,y,z)
     bpy.context.collection.objects.link(steer)
-    roll = bpy.data.objects.new(prefix+"_ROLL", None)
-    roll.location = (x,y,z)
+    roll=bpy.data.objects.new(prefix+"_ROLL",None)
+    roll.parent=steer
+    roll.location=(0,0,0)
     bpy.context.collection.objects.link(roll)
-    if "FRONT" in prefix:
-        roll.parent = steer
-        # Preserve world location after parenting.
-        roll.matrix_parent_inverse = steer.matrix_world.inverted()
-        action_rot(steer, 9, 2, math.radians(-31), math.radians(31))
-    action_rot(roll, 8, 1, -2*math.pi, 2*math.pi)
+    if prefix.startswith("FRONT"):
+        action_rot(steer,9,2,math.radians(-30),math.radians(30))
+    action_rot(roll,8,1,-2*math.pi,2*math.pi)
+    bpy.context.scene.frame_set(100)
 
-    tire = cyl(prefix+"_TIRE", (x,y,z), WHEEL_R, TIRE_W, M["rubber"],
-               48 if LOD==0 else 24, rot=(math.radians(90),0,0))
-    parent_keep(tire, roll)
-    # A shallow torus gives the sidewall/tread shoulder a believable rounded profile.
-    if LOD < 2:
-        shoulder = torus(prefix+"_SHOULDER", (x,y,z), .325, .080, M["rubber"],
-                         rot=(math.radians(90),0,0), major_segments=36 if LOD==0 else 20,
-                         minor_segments=12 if LOD==0 else 6)
-        parent_keep(shoulder, roll)
+    tire=torus(prefix+"_TIRE",(x,y,z),.326,.079,M["rubber"],
+        rot=(math.radians(90),0,0),
+        major_segments=64 if LOD==0 else 32,
+        minor_segments=16 if LOD==0 else 8)
+    parent_keep(tire,roll)
 
-    rim = cyl(prefix+"_RIM", (x,y-side*.012,z), .205, .292, M["rim"],
-              36 if LOD==0 else 20, rot=(math.radians(90),0,0))
-    parent_keep(rim, roll)
-    hub = cyl(prefix+"_HUB", (x,y-side*.156,z), .072, .018, M["black_metal"], 24,
-              rot=(math.radians(90),0,0))
-    parent_keep(hub, roll)
+    rim=cyl(prefix+"_RIM",(x,y-side*.010,z),.205,.268,M["rim"],
+        48 if LOD==0 else 24,rot=(math.radians(90),0,0))
+    parent_keep(rim,roll)
+    lip=torus(prefix+"_RIM_LIP",(x,y-side*.151,z),.181,.012,M["rim_face"],
+        rot=(math.radians(90),0,0),
+        major_segments=48 if LOD==0 else 24,minor_segments=7)
+    parent_keep(lip,roll)
+    hub=cyl(prefix+"_CENTER",(x,y-side*.158,z),.066,.024,M["rim"],32,
+        rot=(math.radians(90),0,0))
+    parent_keep(hub,roll)
 
-    if LOD==0:
-        # Six split/machined spoke groups approximating the photographed 16-in TRD Off Road alloy.
+    if LOD<2:
         for i in range(6):
-            a = i*math.pi/3
-            for off in (-.045,.045):
-                rr=.118
-                sx=x+rr*math.cos(a)+off*math.sin(a)
-                sz=z+rr*math.sin(a)-off*math.cos(a)
-                sp=box(f"{prefix}_SPOKE_{i}_{off:+.3f}",(sx,y-side*.166,sz),
-                       (.155,.018,.044),M["rim_face"],.012,rot=(0,-a,0))
+            a=i*math.pi/3
+            for da in (-.070,.070):
+                sp=spoke_prism(f"{prefix}_SPOKE_{i}_{da:+.3f}",(x,y,z),side,a+da,M["rim_face"])
                 parent_keep(sp,roll)
-        for i in range(24):
-            a=2*math.pi*i/24
-            tx=x+.392*math.cos(a); tz=z+.392*math.sin(a)
-            lug=box(f"{prefix}_TREAD_{i}",(tx,y,tz),(.085,.300,.040),M["rubber"],.008,rot=(0,-a,0))
-            parent_keep(lug,roll)
         for i in range(6):
             a=2*math.pi*i/6
-            lx=x+.053*math.cos(a); lz=z+.053*math.sin(a)
-            nut=cyl(f"{prefix}_LUGNUT_{i}",(lx,y-side*.170,lz),.012,.020,M["steel"],10,
-                    rot=(math.radians(90),0,0))
+            lx=x+.050*math.cos(a); lz=z+.050*math.sin(a)
+            nut=cyl(f"{prefix}_LUG_{i}",(lx,y-side*.174,lz),.010,.018,M["steel"],12,
+                rot=(math.radians(90),0,0))
             parent_keep(nut,roll)
-    return steer, roll
+
+    if LOD==0:
+        for i in range(48):
+            a=2*math.pi*i/48
+            rr=.397
+            tx=x+rr*math.cos(a); tz=z+rr*math.sin(a)
+            yy=y+side*((i%3)-1)*.055
+            lug=box(f"{prefix}_TREAD_{i}",(tx,yy,tz),(.046,.075,.016),M["rubber"],.003,rot=(0,-a,0))
+            parent_keep(lug,roll)
+    return steer,roll
+
 
 def add_front():
-    # bumper / lower valance
-    box("FRONT_BUMPER_QUICKSAND",(2.72,0,.66),(.30,1.86,.34),M["paint"],.08)
-    box("FRONT_LOWER_BLACK",(2.875,0,.48),(.12,1.58,.24),M["black_plastic"],.06)
-    # grille bezel and dark insert
-    box("GRILLE_BEZEL",(2.86,0,1.03),(.075,1.36,.52),M["black_plastic"],.11)
-    box("GRILLE_INNER",(2.902,0,1.03),(.035,1.17,.38),M["black_metal"],.05)
+    bezel=[(-.68,.80),(.68,.80),(.76,.90),(.72,1.28),(.62,1.34),
+           (-.62,1.34),(-.72,1.28),(-.76,.90)]
+    inner=[(-.60,.87),(.60,.87),(.65,.94),(.62,1.24),(.55,1.28),
+           (-.55,1.28),(-.62,1.24),(-.65,.94)]
+    prism_x("GRILLE_BEZEL",2.715,2.785,bezel,M["black_plastic"],.018)
+    prism_x("GRILLE_INNER",2.775,2.810,inner,M["black_metal"],.010)
     if LOD<2:
-        # characteristic two horizontal bars and rectangular slot field
-        for z in (.94,1.12):
-            box(f"GRILLE_BAR_{z}",(2.928,0,z),(.028,1.14,.055),M["black_plastic"],.016)
-        if LOD==0:
-            for row,z in enumerate((.88,1.01,1.15,1.28)):
-                for col in range(11):
-                    yy=-.52+col*.104
-                    box(f"GRILLE_SLOT_{row}_{col}",(2.947,yy,z),(.012,.056,.044),M["black_plastic"],.010)
-        # Toyota emblem stylized as the recognizable three-oval mark.
-        torus("TOYOTA_OUTER",(2.958,0,1.05),.125,.020,M["rim_face"],rot=(0,math.radians(90),0),major_segments=32,minor_segments=8)
-        torus("TOYOTA_INNER_V",(2.968,0,1.05),.070,.013,M["rim_face"],rot=(0,math.radians(90),0),major_segments=24,minor_segments=6)
+        for z in (.97,1.15):
+            box(f"GRILLE_BAR_{z}",(2.817,0,z),(.022,1.16,.055),M["black_plastic"],.012)
+        rows=(.90,1.04,1.18,1.28) if LOD==0 else (.97,1.18)
+        cols=12 if LOD==0 else 8
+        for ri,z in enumerate(rows):
+            for ci in range(cols):
+                y=-.53+ci*(1.06/max(1,cols-1))
+                box(f"GRILLE_SLOT_{ri}_{ci}",(2.823,y,z),(.016,.050,.040),M["black_plastic"],.007)
+    emblem=torus("TOYOTA_OUTER",(2.842,0,1.08),.112,.016,M["rim_face"],
+        rot=(0,math.radians(90),0),major_segments=40,minor_segments=7)
+    emblem.scale=(1.0,.76,1.0)
+    torus("TOYOTA_INNER",(2.848,0,1.08),.058,.010,M["rim_face"],
+        rot=(0,math.radians(90),0),major_segments=28,minor_segments=6)
 
-    # headlights and fog lights
     for side in (-1,1):
-        y=side*.72
-        box(f"HEADLAMP_{side}",(2.79,y,1.25),(.12,.39,.22),M["headlamp"],.065)
-        if LOD<2:
-            sphere(f"PROJECTOR_{side}",(2.854,y-side*.05,1.27),.083,M["chrome"],seg=24,rings=12)
-            sphere(f"PROJECTOR_GLASS_{side}",(2.897,y-side*.05,1.27),.059,M["headlamp"],seg=20,rings=10)
-            box(f"TURN_AMBER_{side}",(2.846,y+side*.145,1.25),(.04,.080,.115),M["amber"],.025)
-            box(f"DRL_STRIP_{side}",(2.865,y-side*.025,1.16),(.025,.25,.025),M["white"],.010)
-        cyl(f"FOG_{side}",(2.882,side*.65,.73),.092,.055,M["headlamp"],24,rot=(0,math.radians(90),0))
-        cyl(f"FOG_RING_{side}",(2.901,side*.65,.73),.115,.034,M["black_plastic"],24,rot=(0,math.radians(90),0))
+        yz=[(side*.50,1.12),(side*.87,1.12),(side*.91,1.23),
+            (side*.84,1.40),(side*.56,1.39),(side*.48,1.28)]
+        if side < 0: yz=list(reversed(yz))
+        prism_x(f"HEADLAMP_{side}",2.66,2.775,yz,M["headlamp"],.016)
+        py=side*.68
+        sphere(f"PROJECTOR_CHROME_{side}",(2.790,py,1.28),.082,M["chrome"],26,13)
+        sphere(f"PROJECTOR_GLASS_{side}",(2.823,py,1.28),.056,M["headlamp"],22,11)
+        box(f"TURN_AMBER_{side}",(2.796,side*.845,1.27),(.028,.072,.105),M["amber"],.018)
+        tube(f"DRL_{side}",[(2.825,side*.54,1.17),(2.825,side*.76,1.17),(2.820,side*.82,1.22)],.013,M["white"],1)
+
+    lower=[(-.77,.46),(.77,.46),(.82,.54),(.77,.77),(.65,.82),
+           (-.65,.82),(-.77,.77),(-.82,.54)]
+    prism_x("FRONT_LOWER_VALANCE",2.72,2.835,lower,M["black_plastic"],.022)
+    for side in (-1,1):
+        cyl(f"FOG_BEZEL_{side}",(2.850,side*.66,.68),.116,.040,M["black_plastic"],32,rot=(0,math.radians(90),0))
+        cyl(f"FOG_{side}",(2.875,side*.66,.68),.080,.050,M["headlamp"],32,rot=(0,math.radians(90),0))
+    box("FRONT_LED_BAR",(2.842,0,.805),(.035,.98,.068),M["black_metal"],.010)
+    if LOD==0:
+        for i in range(18):
+            y=-.435+i*(.87/17)
+            sphere(f"FRONT_LED_{i}",(2.865,y,.805),.017,M["headlamp"],12,6)
+    box("FRONT_CHIN",(2.79,0,.49),(.22,1.42,.20),M["black_plastic"],.045)
+
 
 def add_body():
     paint=M["burnt"] if DESTROYED else M["paint"]
-    # underbody/frame
-    box("FRAME_L",(0,.53,.43),(4.75,.10,.12),M["steel"],.02)
-    box("FRAME_R",(0,-.53,.43),(4.75,.10,.12),M["steel"],.02)
-    box("SKID_PLATE",(1.42,0,.34),(1.05,.84,.07),M["steel"],.03)
-    for ax in (FRONT_AXLE,REAR_AXLE):
-        cyl(f"AXLE_{ax:+.2f}",(ax,0,.44),.060,1.54,M["steel"],16,rot=(math.radians(90),0,0))
-        sphere(f"DIFF_{ax:+.2f}",(ax,0,.44),.16,M["steel"],seg=16,rings=8)
 
-    # hood and front fenders
-    box("HOOD",(1.91,0,1.27),(1.45,1.64,.18),paint,.07,rot=(0,math.radians(-2.5),0))
-    box("FRONT_FENDER_L",(1.58,.79,1.04),(1.32,.18,.52),paint,.08)
-    box("FRONT_FENDER_R",(1.58,-.79,1.04),(1.32,.18,.52),paint,.08)
+    # Asymmetric DCLB axle positions: front overhang is shorter than rear.
+    global FRONT_AXLE, REAR_AXLE
+    FRONT_AXLE=1.800
+    REAR_AXLE=FRONT_AXLE-WHEELBASE
 
-    # rocker / lower body structure
-    box("CAB_ROCKER",(0.18,0,.76),(2.32,1.68,.34),paint,.08)
-    # doors as distinct surface panels so seams read at close range
+    body=loft_sections("BODY_LOWER",[
+      (2.78,.74,.53,.97,.10,.10),(2.62,.86,.52,1.16,.09,.10),
+      (2.30,.91,.50,1.27,.08,.10),(1.80,.94,.49,1.31,.07,.10),
+      (1.24,.93,.50,1.28,.07,.09),(.72,.91,.50,1.20,.06,.08),
+      (-.72,.91,.50,1.18,.06,.08),(-1.08,.93,.51,1.16,.06,.08),
+      (-2.45,.93,.52,1.15,.06,.08),(-2.73,.89,.54,1.09,.08,.09)
+    ],paint,.018)
+    boolean_wheel_well(body,FRONT_AXLE,.485)
+    boolean_wheel_well(body,REAR_AXLE,.485)
+
+    for sy in (-.52,.52):
+        box(f"FRAME_{sy}",(-.10,sy,.39),(4.55,.095,.12),M["steel"],.012)
+    cyl("REAR_AXLE",(REAR_AXLE,0,.40),.055,1.52,M["steel"],20,rot=(math.radians(90),0,0))
+    sphere("REAR_DIFF",(REAR_AXLE,0,.40),.145,M["steel"],18,9)
+    tube("DRIVESHAFT",[(.85,0,.50),(-1.55,0,.42)],.038,M["steel"],1)
+    tube("EXHAUST",[(-.35,-.42,.36),(-1.65,-.58,.38),(-2.55,-.64,.43)],.025,M["steel"],1)
     for side in (-1,1):
-        sy=side*.855
-        for name,x,w in (("FRONT_DOOR",.55,1.03),("REAR_DOOR",-.47,.94)):
-            box(f"{name}_{side}",(x,sy,.98),(w,.055,.72),paint,.035)
-        # panel seams
-        if LOD<2:
-            for x in (.02,1.08,-.96):
-                box(f"DOOR_SEAM_{side}_{x}",(x,sy+side*.030,1.00),(.015,.008,.72),M["black_plastic"],.0)
-        # handles
-        for x in (.55,-.47):
-            box(f"DOOR_HANDLE_{side}_{x}",(x+.11,sy+side*.045,1.18),(.19,.035,.045),paint,.018)
+        tube(f"LEAF_{side}",[(REAR_AXLE-.68,side*.55,.43),(REAR_AXLE,side*.55,.37),(REAR_AXLE+.65,side*.55,.43)],.017,M["steel"],1)
 
-    # upper cab shell, roof, pillars
-    box("CAB_ROOF",(0.05,0,1.68),(2.17,1.66,.13),paint,.07)
+    loft_sections("HOOD_SKIN",[
+      (2.56,.77,1.135,1.205,.10,.025),(2.18,.84,1.205,1.285,.09,.025),
+      (1.36,.86,1.255,1.335,.08,.025),(1.05,.82,1.245,1.325,.08,.025)
+    ],paint,.010)
+
+    loft_sections("CAB_ROOF",[
+      (.78,.78,1.69,1.78,.08,.035),(.10,.82,1.72,1.82,.07,.035),
+      (-.72,.80,1.69,1.79,.07,.035),(-.91,.76,1.63,1.73,.08,.035)
+    ],paint,.012)
+    box("WINDSHIELD",(.91,0,1.48),(.055,1.58,.54),M["glass"],.024,rot=(0,math.radians(-18),0))
+    box("COWL_BLACK",(1.12,0,1.27),(.16,1.67,.075),M["black_plastic"],.016)
+
+    front_poly=[(.10,1.24),(.88,1.27),(.73,1.68),(.08,1.68)]
+    rear_poly=[(-.79,1.23),(.01,1.24),(.01,1.68),(-.72,1.68)]
     for side in (-1,1):
-        y=side*.82
-        box(f"A_PILLAR_{side}",(.98,y,1.46),(.18,.10,.55),M["black_plastic"],.035,rot=(0,math.radians(-13),0))
-        box(f"B_PILLAR_{side}",(.09,y,1.45),(.11,.10,.56),M["black_plastic"],.025)
-        box(f"C_PILLAR_{side}",(-.88,y,1.43),(.12,.10,.54),paint,.030)
-        # front & rear tinted side windows
-        box(f"FRONT_WINDOW_{side}",(.55,y+side*.011,1.47),(.70,.025,.42),M["glass"],.065)
-        box(f"REAR_WINDOW_{side}",(-.43,y+side*.011,1.47),(.70,.025,.42),M["glass"],.060)
+        prism_y(f"FRONT_GLASS_{side}",side*.903,side*.916,front_poly,M["glass"],.006)
+        prism_y(f"REAR_GLASS_{side}",side*.903,side*.916,rear_poly,M["glass"],.006)
+        box(f"B_PILLAR_{side}",(.045,side*.916,1.46),(.075,.032,.47),M["black_plastic"],.010)
+        for sx in (.045,.93,-.86):
+            box(f"DOOR_SEAM_{side}_{sx}",(sx,side*.924,.99),(.010,.006,.66),M["black_plastic"],.001)
+        for hx in (.52,-.38):
+            box(f"DOOR_HANDLE_{side}_{hx}",(hx,side*.938,1.16),(.18,.030,.045),paint,.014)
+        box(f"MIRROR_STEM_{side}",(.82,side*1.00,1.42),(.20,.16,.14),M["black_plastic"],.032)
+        box(f"MIRROR_CAP_{side}",(.77,side*1.105,1.48),(.30,.18,.18),paint,.055)
+        box(f"MIRROR_GLASS_{side}",(.74,side*1.198,1.48),(.20,.010,.125),M["glass"],.022)
 
-    # windshield and rear cab glass
-    box("WINDSHIELD",(1.03,0,1.49),(.055,1.43,.49),M["glass"],.065,rot=(0,math.radians(-13),0))
-    box("CAB_REAR_GLASS",(-1.00,0,1.45),(.035,1.38,.44),M["glass"],.045)
-
-    # bed lower & shoulders, leaving wheel region visually open
-    box("BED_FLOOR",(-1.84,0,.75),(1.70,1.62,.15),paint,.04)
-    box("BED_SIDE_L",(-1.86,.82,1.02),(1.70,.12,.48),paint,.06)
-    box("BED_SIDE_R",(-1.86,-.82,1.02),(1.70,.12,.48),paint,.06)
-    box("TAILGATE",(-2.70,0,1.02),(.12,1.65,.48),paint,.05)
-
-    # camper shell exactly as photographed/concept: paint matched, large dark side glass.
-    box("CAMPER_SHELL",(-1.83,0,1.45),(1.62,1.66,.76),paint,.08)
-    box("CAMPER_ROOF",(-1.83,0,1.82),(1.70,1.68,.11),paint,.055)
+    loft_sections("CAMPER_SHELL",[
+      (-1.00,.87,1.12,1.28,.05,.04),(-1.35,.89,1.12,1.72,.05,.05),
+      (-2.52,.89,1.11,1.72,.05,.05),(-2.69,.84,1.08,1.64,.06,.05)
+    ],paint,.014)
+    loft_sections("CAMPER_ROOF",[
+      (-1.22,.80,1.69,1.80,.08,.035),(-1.90,.84,1.72,1.83,.07,.035),
+      (-2.55,.80,1.69,1.79,.08,.035)
+    ],paint,.010)
+    capwin=[(-2.45,1.28),(-1.22,1.28),(-1.31,1.68),(-2.40,1.68)]
     for side in (-1,1):
-        box(f"CAMPER_WINDOW_{side}",(-1.83,side*.835,1.54),(1.23,.030,.43),M["glass"],.055)
-    box("CAMPER_REAR_GLASS",(-2.665,0,1.55),(.035,1.42,.46),M["glass"],.05)
+        prism_y(f"CAMPER_GLASS_{side}",side*.904,side*.917,capwin,M["glass"],.006)
+    box("CAMPER_REAR_GLASS",(-2.685,0,1.46),(.025,1.48,.43),M["glass"],.022)
 
-    # mirrors
     for side in (-1,1):
-        y=side*.99
-        box(f"MIRROR_BASE_{side}",(.94,y,1.48),(.18,.18,.17),M["black_plastic"],.04)
-        box(f"MIRROR_CAP_{side}",(.90,y+side*.09,1.51),(.27,.18,.18),paint,.065)
-        box(f"MIRROR_GLASS_{side}",(.865,y+side*.185,1.51),(.19,.012,.12),M["glass"],.03)
+        for axle,label in ((FRONT_AXLE,"FRONT"),(REAR_AXLE,"REAR")):
+            pts=[]
+            count=31 if LOD==0 else 17
+            for i in range(count):
+                a=math.radians(10+160*i/(count-1))
+                pts.append((axle+.500*math.cos(a),side*.955,.405+.500*math.sin(a)))
+            tube(f"{label}_FLARE_{side}",pts,.043,M["black_plastic"],2 if LOD==0 else 1)
 
-    # black tube rock sliders, with support stubs.
     for side in (-1,1):
-        y=side*1.01
-        tube(f"ROCK_SLIDER_{side}",[(-1.05,y,.60),(1.12,y,.60)],.045,M["black_metal"],2 if LOD==0 else 1)
-        if LOD==0:
-            for x in (-.72,0,.72):
-                tube(f"ROCK_SLIDER_BRACE_{side}_{x}",[(x,side*.80,.55),(x,y,.60)],.028,M["black_metal"],1)
+        tube(f"ROCK_SLIDER_{side}",[(-1.02,side*1.00,.54),(.98,side*1.00,.54)],.042,M["black_metal"],2)
+        for x in (-.72,-.05,.64):
+            tube(f"ROCK_SLIDER_BRACE_{side}_{x}",[(x,side*.78,.50),(x,side*1.00,.54)],.024,M["black_metal"],1)
 
-    # Black plastic wheel arch flares matching the photos.
-    for side in (-1,1):
-        arch_flare(f"FRONT_FLARE_{side}",FRONT_AXLE,side*.895,.49,M["black_plastic"])
-        arch_flare(f"REAR_FLARE_{side}",REAR_AXLE,side*.895,.49,M["black_plastic"])
+    wheel("FRONT_L",FRONT_AXLE,1)
+    wheel("FRONT_R",FRONT_AXLE,-1)
+    wheel("REAR_L",REAR_AXLE,1)
+    wheel("REAR_R",REAR_AXLE,-1)
 
-    # modest photographed ride height: no invented lift.
-    wheel("FRONT_L" if 1 else "", FRONT_AXLE, 1)
-    wheel("FRONT_R", FRONT_AXLE, -1)
-    wheel("REAR_L", REAR_AXLE, 1)
-    wheel("REAR_R", REAR_AXLE, -1)
 
 def add_rack_and_lights():
-    # Two low-profile rack/platform sections, black powder coat.
-    for cx,l in ((.18,1.78),(-1.83,1.48)):
+    if LOD>=2:
+        return
+    for cx,length,z in ((.15,1.78,1.88),(-1.88,1.45,1.91)):
         for side in (-1,1):
-            box(f"RACK_SIDE_{cx}_{side}",(cx,side*.76,1.88),(l,.055,.14),M["black_metal"],.025)
-        for i in range(6 if LOD==0 else 3):
-            x=cx-l*.42+i*(l*.84/max(1,(5 if LOD==0 else 2)))
-            box(f"RACK_CROSS_{cx}_{i}",(x,0,1.90),(.045,1.52,.045),M["black_metal"],.012)
-        if LOD==0:
-            for side in (-1,1):
-                for i in range(5):
-                    x=cx-l*.40+i*(l*.80/4)
-                    cyl(f"RACK_BOLT_{cx}_{side}_{i}",(x,side*.785,1.90),.012,.018,M["steel"],10)
+            box(f"RACK_SIDE_{cx}_{side}",(cx,side*.78,z),(length,.052,.105),M["black_metal"],.018)
+        bars=8 if LOD==0 else 4
+        for i in range(bars):
+            x=cx-length*.44+i*(length*.88/max(1,bars-1))
+            box(f"RACK_CROSS_{cx}_{i}",(x,0,z+.014),(.038,1.52,.034),M["black_metal"],.007)
 
-    # Black Oak hood/cowl cube lights with rear cooling fins and four LED optics.
-    if LOD<2:
-        for side in (-1,1):
-            x=1.17; y=side*.82; z=1.57
-            box(f"DITCH_BRACKET_{side}",(x-.06,y,z-.11),(.15,.055,.17),M["black_metal"],.015)
-            box(f"BLACK_OAK_HOUSING_{side}",(x,y+side*.025,z),(.16,.22,.18),M["black_metal"],.035)
-            # front lens faces out slightly forward/side but retain square four-cell identity.
-            face_y=y+side*.142
-            for r in (-.038,.038):
-                for c in (-.038,.038):
-                    sphere(f"BLACK_OAK_LED_{side}_{r}_{c}",(x+r,face_y,z+c),.025,M["headlamp"],seg=16,rings=8)
-            if LOD==0:
-                for i in range(5):
-                    box(f"BLACK_OAK_FIN_{side}_{i}",(x-.092+i*.046,y-side*.105,z),(.018,.045,.19),M["black_plastic"],.006)
+    for side in (-1,1):
+        x=1.10; y=side*.86; z=1.52
+        tube(f"DITCH_BRACKET_{side}",[(1.03,side*.77,1.33),(1.10,y,1.43)],.017,M["black_metal"],1)
+        box(f"BLACK_OAK_HOUSING_{side}",(x,y,z),(.15,.18,.16),M["black_metal"],.024)
+        face_y=y+side*.096
+        for dx in (-.032,.032):
+            for dz in (-.032,.032):
+                sphere(f"BLACK_OAK_LED_{side}_{dx}_{dz}",(x+dx,face_y,z+dz),.020,M["headlamp"],12,6)
+        if LOD==0:
+            for i in range(5):
+                box(f"BLACK_OAK_FIN_{side}_{i}",(x-.070+i*.035,y-side*.095,z),(.012,.030,.15),M["black_plastic"],.003)
+
 
 def add_rear():
     paint=M["burnt"] if DESTROYED else M["paint"]
-    # tail lamps
     for side in (-1,1):
-        y=side*.77
-        box(f"TAIL_LAMP_{side}",(-2.765,y,1.15),(.10,.22,.34),M["red"],.045)
-        if LOD<2:
-            box(f"TAIL_REVERSE_{side}",(-2.82,y,1.10),(.025,.16,.085),M["white"],.018)
-    # heavy duty photographed/concept rear bumper
-    box("REAR_HD_BUMPER",(-2.84,0,.63),(.28,1.88,.31),M["black_metal"],.045)
-    box("REAR_BUMPER_CENTER",(-2.965,0,.68),(.05,.78,.20),M["black_metal"],.022)
-    # bright amber auxiliary backup lights recessed in bumper
+        box(f"TAIL_LAMP_{side}",(-2.760,side*.84,1.18),(.12,.17,.38),M["red"],.028)
+        box(f"TAIL_REVERSE_{side}",(-2.825,side*.845,1.13),(.025,.13,.075),M["white"],.012)
+
+    box("TAILGATE_FACE",(-2.744,0,1.05),(.055,1.62,.43),paint,.022)
+    box("TAILGATE_HANDLE",(-2.780,0,1.20),(.030,.25,.075),M["black_plastic"],.016)
+    box("REAR_BUMPER_MAIN",(-2.86,0,.62),(.27,1.86,.25),M["black_metal"],.032)
     for side in (-1,1):
-        y=side*.55
-        box(f"REAR_AMBER_BACKUP_{side}",(-2.995,y,.69),(.022,.20,.10),M["amber"],.018)
+        box(f"REAR_BUMPER_WING_{side}",(-2.82,side*.77,.69),(.32,.36,.30),M["black_metal"],.026,rot=(0,0,math.radians(side*3)))
+        box(f"REAR_AMBER_BACKUP_{side}",(-3.005,side*.56,.69),(.025,.20,.095),M["amber"],.012)
         if LOD==0:
-            for rr in (-.030,.030):
-                for cc in (-.055,.0,.055):
-                    sphere(f"REAR_AMBER_LED_{side}_{rr}_{cc}",(-3.010,y+cc,.69+rr),.013,M["amber"],seg=12,rings=6)
-    # recovery points / D-rings
-    if LOD==0:
-        for side in (-1,1):
-            torus(f"D_RING_{side}",(-2.995,side*.33,.53),.072,.018,M["steel"],rot=(0,math.radians(90),0),major_segments=20,minor_segments=7)
-    # hitch receiver
-    box("HITCH_RECEIVER",(-3.02,0,.42),(.22,.13,.13),M["black_metal"],.018)
-    # tailgate handle & Tacoma emboss
-    box("TAILGATE_HANDLE",(-2.77,0,1.18),(.05,.27,.085),M["black_plastic"],.025)
-    if LOD==0:
-        text_obj("TACOMA","TAILGATE_TACOMA",(-2.772,0,1.00),.16,M["paint_clean"],rot=(0,math.radians(90),math.radians(90)))
-        text_obj("V6","TAILGATE_V6",(-2.778,-.57,1.03),.09,M["black_plastic"],rot=(0,math.radians(90),math.radians(90)))
+            for rr in (-.025,.025):
+                for cc in (-.055,0,.055):
+                    sphere(f"REAR_AMBER_LED_{side}_{rr}_{cc}",(-3.020,side*.56+cc,.69+rr),.012,M["amber"],10,5)
+        torus(f"RECOVERY_RING_{side}",(-3.00,side*.32,.51),.065,.016,M["steel"],rot=(0,math.radians(90),0),major_segments=24,minor_segments=6)
+    box("HITCH_RECEIVER",(-3.00,0,.41),(.22,.13,.13),M["black_metal"],.014)
+
 
 def add_badges_plate_weather():
     if LOD>0:
         return
-    # Side badges / decals. Flat decals, no raised floating lettering.
     for side in (-1,1):
-        y=side*.889
-        text_obj("TACOMA",f"SIDE_TACOMA_{side}",(.53,y,1.02),.105,M["black_plastic"],
-                 rot=(math.radians(90),0,0 if side>0 else math.pi))
-        text_obj("TRD 4X4",f"TRD_DECAL_{side}",(-2.05,y,1.32),.115,M["black_plastic"],
-                 rot=(math.radians(90),0,0 if side>0 else math.pi))
-        text_obj("OFF ROAD",f"TRD_SUB_{side}",(-2.03,y,1.22),.055,M["red"],
-                 rot=(math.radians(90),0,0 if side>0 else math.pi))
+        rot=(-math.pi/2,0,0) if side>0 else (math.pi/2,0,0)
+        text_obj("TACOMA",f"SIDE_TACOMA_{side}",(.48,side*.946,1.02),.090,M["black_plastic"],rot=rot)
+        text_obj("TRD 4X4",f"TRD_BADGE_{side}",(-2.03,side*.946,1.28),.085,M["black_plastic"],rot=rot)
+        text_obj("OFF ROAD",f"TRD_OFFROAD_{side}",(-2.03,side*.946,1.215),.040,M["red"],rot=rot)
 
-    # Fictional DCS plate, realistic proportions/reflection rather than a cartoon logo.
-    box("DCS_PLATE_FRONT",(2.953,0,.55),(.018,.305,.155),M["white"],.012)
-    text_obj("DCS 416", "DCS_PLATE_FRONT_TEXT", (2.965,0,.553), .072, M["blue"],
-             rot=(0,math.radians(90),math.radians(90)))
-    box("DCS_PLATE_REAR",(-3.003,0,.75),(.018,.305,.155),M["white"],.012)
-    text_obj("DCS 416", "DCS_PLATE_REAR_TEXT", (-3.015,0,.753), .072, M["blue"],
-             rot=(0,math.radians(-90),math.radians(90)))
+    box("DCS_PLATE_FRONT",(2.915,0,.52),(.018,.305,.155),M["white"],.009)
+    text_obj("DCS 4X4","DCS_PLATE_FRONT_TEXT",(2.928,0,.52),.055,M["blue"],
+             rot=(math.radians(90),0,math.radians(90)))
+    box("DCS_PLATE_REAR",(-2.985,0,.70),(.018,.305,.155),M["white"],.009)
 
-    # Thin dried-mud/road-wear patches concentrated exactly where visible in the photos:
-    # lower doors, rocker and the trailing edge of the front flare.
-    rng=random.Random(4162016)
-    for side in (-1,1):
-        sy=side*.892
-        for i in range(22):
-            x=rng.uniform(-.9,1.12); z=rng.uniform(.68,.88)
-            w=rng.uniform(.025,.12); h=rng.uniform(.008,.035)
-            box(f"MUD_SIDE_{side}_{i}",(x,sy+side*.006,z),(w,.004,h),M["mud"],.002)
-        for i in range(12):
-            a=math.radians(rng.uniform(55,135))
-            x=FRONT_AXLE+.50*math.cos(a); z=.49+.50*math.sin(a)
-            box(f"MUD_FLARE_{side}_{i}",(x,side*.902,z),(.035,.006,.018),M["mud"],.003,rot=(0,-a,0))
 
 def add_interior():
     if LOD>0:
         return
-    # Only what is visible through the dark tint: seats, dash silhouette, wheel.
-    for x in (.45,-.45):
+    box("DASH",(.82,0,1.24),(.31,1.36,.18),M["black_plastic"],.035,rot=(0,math.radians(-7),0))
+    for x in (.38,-.45):
         for side in (-1,1):
-            box(f"SEAT_{x}_{side}",(x,side*.36,1.11),(.38,.44,.52),M["black_plastic"],.08)
-    box("DASH",(1.00,0,1.28),(.28,1.28,.20),M["black_plastic"],.05)
-    torus("STEERING_WHEEL",(1.00,-.32,1.34),.15,.018,M["black_plastic"],
-          rot=(0,math.radians(90),0),major_segments=24,minor_segments=7)
+            box(f"SEAT_{x}_{side}",(x,side*.34,1.08),(.40,.42,.48),M["black_plastic"],.068)
+            box(f"HEADREST_{x}_{side}",(x-.03,side*.34,1.39),(.23,.28,.18),M["black_plastic"],.045)
+    torus("STEERING_WHEEL",(.78,-.32,1.33),.145,.017,M["black_plastic"],
+          rot=(0,math.radians(90),0),major_segments=28,minor_segments=7)
 
 def add_collision():
     # Separate low-complexity collision-only volumes; no giant detailed render mesh is used as collision.
@@ -509,25 +587,24 @@ def wreck_damage():
     for i,(x,y,z) in enumerate(((-2.25,.90,.18),(-1.75,-.88,.16),(.85,.94,.15))):
         box(f"WRECK_DEBRIS_{i}",(x,y,z),(.35,.16,.06),M["burnt"],.01,rot=(0,math.radians(12*i),math.radians(18-9*i)))
 
+
 def build():
     materials()
+    bpy.context.scene.frame_start=0
+    bpy.context.scene.frame_end=200
+    bpy.context.scene.frame_set(100)
     add_body()
     add_front()
     add_rear()
-    if LOD < 2 and not DESTROYED:
-        add_rack_and_lights()
-    elif LOD < 2 and DESTROYED:
-        # some rack remains on destroyed model
-        add_rack_and_lights()
+    add_rack_and_lights()
     add_badges_plate_weather()
     add_interior()
     wreck_damage()
     add_collision()
-
-    # Origin/ground check marker is intentionally absent from export.
-    print(f"[TPG TACOMA] built LOD={LOD} destroyed={DESTROYED} objects={len(bpy.context.scene.objects)}")
-    print("[TPG TACOMA] wheel animation arguments: 8 rotation, 9 steering")
-    print("[TPG TACOMA] reference: 2016 Tacoma TRD Off Road 4x4 DCLB, Quicksand, photographed custom truck")
+    bpy.context.scene.frame_set(100)
+    print(f"[TPG TACOMA V2] built LOD={LOD} destroyed={DESTROYED} objects={len(bpy.context.scene.objects)}")
+    print("[TPG TACOMA V2] DCS wheel args: 8 rotation / 9 steering with separate centered pivots")
+    print("[TPG TACOMA V2] neutral export frame 100")
 
 build()
 
