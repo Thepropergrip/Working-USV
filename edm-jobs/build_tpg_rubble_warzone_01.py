@@ -3,6 +3,7 @@ from pathlib import Path
 from mathutils import Vector
 
 # TPG Warzone Rubble Pile 01
+# PR validation trigger: Windows Blender 4.1.1 / official ED exporter
 # 20 x 20 ft class rubble/debris static asset for DCS World.
 # No terrain/base plane is used: low debris is deliberately buried slightly below z=0
 # so the pile integrates into DCS terrain without a coplanar slab or z-fighting.
