@@ -1,12 +1,23 @@
 import runpy
 import bpy
 
-# Build through the current visual/material quality pass first.
-runpy.run_path("edm-jobs/build_tpg_tacoma_quality_patch3.py", run_name="__main__")
+# Build through the current visual/material quality pass first and retain its
+# namespace. Later quality passes must reuse these helpers instead of running
+# patch3 a second time, which duplicated the whole Tacoma scene.
+ns = runpy.run_path("edm-jobs/build_tpg_tacoma_quality_patch3.py", run_name="__main__")
+M = ns['M']
+box = ns['box']
+cyl = ns['cyl']
+torus = ns['torus']
+text_obj = ns['text_obj']
+mat = ns['mat']
+LOD = ns['LOD']
+TEXDIR = ns['TEXDIR']
+MAT_DESCS = ns['MAT_DESCS']
+tube = ns.get('tube')
 
 # Keep world transform while attaching added wheel-face geometry to the existing
-# DCS argument-8 roll joints. Define this locally instead of depending on a
-# nested runpy namespace, which is not guaranteed to re-export helper symbols.
+# DCS argument-8 roll joints.
 def parent_keep(child, parent):
     mw = child.matrix_world.copy()
     child.parent = parent
