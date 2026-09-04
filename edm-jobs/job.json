@@ -1,6 +1,6 @@
 {
   "mode": "script",
-  "script": "edm-jobs/build_magura360.py",
-  "output": "MAGURA_W6_SeaDragon_AIM9X_360.edm",
+  "script": "edm-jobs/build_grizzly_rc4.py",
+  "output": "TPG_GRIZZLY_HELLFIRE.edm",
   "save_blend": true
 }
