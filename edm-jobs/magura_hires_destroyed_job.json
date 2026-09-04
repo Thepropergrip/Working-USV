@@ -1,0 +1,7 @@
+{
+  "mode": "blend",
+  "blend": "edm-artifacts/MAGURA_W6_SeaDragon_AIM9X_360_HiRes.blend",
+  "post_script": "edm-jobs/magura_hires_destroyed_visibility.py",
+  "output": "MAGURA_W6_SeaDragon_AIM9X_360_HiRes_destroyed.edm",
+  "save_blend": false
+}
