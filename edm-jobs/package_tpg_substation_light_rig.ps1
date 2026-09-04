@@ -15,14 +15,14 @@ if (Test-Path (Join-Path $root "Textures")) {
 }
 
 $entry = @'
-declare_plugin("TPG Electrical Substation V1.0 LIGHT RIG",
+declare_plugin("TPG Electrical Substation V1.0 LIGHT RIG DIAGNOSTIC",
 {
     installed = true,
     dirName = current_mod_path,
-    displayName = _("TPG Electrical Substation V1.0 LIGHT RIG"),
-    version = "1.0.1",
+    displayName = _("TPG Electrical Substation V1.0 LIGHT RIG DIAGNOSTIC"),
+    version = "1.0.2-DIAG",
     state = "installed",
-    info = _("Dedicated nine-light illumination rig with explicit EDM bounding and light boxes")
+    info = _("Diagnostic nine-light rig with highly visible 8m magenta masts and emissive heads")
 })
 mount_vfs_model_path(current_mod_path.."/Shapes")
 mount_vfs_texture_path(current_mod_path.."/Textures")
@@ -49,7 +49,7 @@ end
 
 add_structure({
     Name = "TPG_Electrical_Substation_V1_LIGHT_RIG",
-    DisplayName = _("TPG Substation Light Rig"),
+    DisplayName = _("TPG Substation Light Rig DIAGNOSTIC"),
     ShapeName = "TPG_Electrical_Substation_V1_LIGHT_RIG",
     Life = 100000,
     Rate = 1,
@@ -62,30 +62,35 @@ add_structure({
 Set-Content -Path (Join-Path $db "db_tpg_substation_light_rig.lua") -Value $dbLua -Encoding UTF8
 
 $readme = @'
-TPG Electrical Substation V1.0 LIGHT RIG v1.0.1
-================================================
+TPG Electrical Substation V1.0 LIGHT RIG DIAGNOSTIC v1.0.2
+============================================================
+
+This is a deliberately obvious diagnostic build.
+
+Daylight proof-of-load geometry:
+- nine full-height ~8 m fluorescent-magenta masts
+- large orange base plates
+- oversized warm-white emissive lamp heads
+- visible crossbars
+
+Lighting:
+- same nine real EDM spot lights, strengthened for the test
+- explicit EDM BOUNDING_BOX and LIGHT_BOX retained
 
 Purpose:
-Dedicated lighting asset matched to the exact footprint of TPG Electrical Substation V1.0.
-
-This revision fixes the DCS "Model has invalid bounding box" rejection seen in the prior rig:
-- tiny lamp-head meshes now use real Eagle Dynamics EDM materials and export as actual triangles
-- a real buried EDM-material anchor mesh exists near origin
-- an explicit EDM BOUNDING_BOX spans the entire rig
-- an explicit EDM LIGHT_BOX spans the illumination volume
-- the nine strong warm-white EDM spot lights are retained
+If the magenta masts appear in Mission Editor/in-game, DCS is definitely instantiating the asset.
+If the masts appear but no terrain illumination appears at night, the remaining problem is specifically
+runtime servicing of the EDM light nodes rather than model loading/bounds/materials.
 
 Install:
-Copy TPG_Electrical_Substation_V1_LIGHT_RIG into:
+REPLACE the prior TPG_Electrical_Substation_V1_LIGHT_RIG folder in:
   Saved Games\DCS\Mods\tech\
 
 Mission Editor:
-Static Objects -> Structures -> TPG Substation Light Rig
+Static Objects -> Structures -> TPG Substation Light Rig DIAGNOSTIC
 
 Placement:
-1. Place the normal TPG Electrical Substation V1.0.
-2. Place TPG Substation Light Rig at the EXACT SAME coordinates and heading.
-3. The tiny rig lamp-head meshes occupy the same fixture locations as the visible substation lights.
+Place at the exact same coordinates and heading as TPG Electrical Substation V1.0.
 '@
 Set-Content -Path (Join-Path $pkg "README.txt") -Value $readme -Encoding UTF8
 
