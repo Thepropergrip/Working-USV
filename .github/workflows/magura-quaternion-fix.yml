@@ -1,0 +1,93 @@
+name: MAGURA 360 Quaternion Fix
+
+on:
+  push:
+    paths:
+      - ".github/workflows/magura-quaternion-fix.yml"
+      - "edm-jobs/magura_quaternion_patch.py"
+      - "edm-jobs/magura_quaternion_job.json"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  export-magura-fix:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      BLENDER_VERSION: "4.1.1"
+      BLENDER_URL: "https://download.blender.org/release/Blender4.1/blender-4.1.1-windows-x64.zip"
+      ED_EXPORTER_COMMIT: "5f03ba70ec96ca6ce68028eabc786ecd97f9cf93"
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Download known-good MAGURA 360 base blend
+        uses: actions/download-artifact@v4
+        with:
+          name: dcs-edm-295
+          path: base-artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: Thepropergrip/Working-USV
+          run-id: 33815500891
+
+      - name: Verify base blend
+        shell: pwsh
+        run: |
+          $blend = "base-artifact/MAGURA_W6_SeaDragon_AIM9X_360.blend"
+          if (-not (Test-Path $blend)) { throw "Known-good MAGURA base blend missing: $blend" }
+          Write-Host "Base blend bytes: $((Get-Item $blend).Length)"
+
+      - name: Install Blender 4.1.1 portable
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $zip = Join-Path $env:RUNNER_TEMP "blender-$env:BLENDER_VERSION.zip"
+          $dir = Join-Path $env:RUNNER_TEMP "blender-$env:BLENDER_VERSION"
+          Invoke-WebRequest -Uri $env:BLENDER_URL -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $dir -Force
+          $exe = Get-ChildItem -Path $dir -Filter blender.exe -Recurse | Select-Object -First 1
+          if (-not $exe) { throw "Blender executable not found." }
+          "BLENDER_EXE=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Install official Eagle Dynamics EDM exporter
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $src = Join-Path $env:RUNNER_TEMP "Blender-EDM-Exporter"
+          git clone --filter=blob:none https://github.com/EagleDynamics/Blender-EDM-Exporter.git $src
+          git -C $src checkout $env:ED_EXPORTER_COMMIT
+          $scripts = Join-Path $env:GITHUB_WORKSPACE ".edm-blender-scripts"
+          $addons = Join-Path $scripts "addons"
+          New-Item -ItemType Directory -Force -Path $addons | Out-Null
+          Copy-Item -Recurse -Force (Join-Path $src "io_scene_edm") (Join-Path $addons "io_scene_edm")
+          $upper = Join-Path $addons "io_scene_edm/Materials"
+          $temp  = Join-Path $addons "io_scene_edm/__materials_casefix"
+          if (Test-Path $upper) {
+            Rename-Item -Path $upper -NewName "__materials_casefix"
+            Rename-Item -Path $temp -NewName "materials"
+          }
+          $native = Join-Path $addons "io_scene_edm/pyedm_311.pyd"
+          if (-not (Test-Path $native)) { throw "Official native pyedm_311.pyd missing." }
+          "BLENDER_USER_SCRIPTS=$scripts" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "EDM_EXPORTER_COMMIT=$env:ED_EXPORTER_COMMIT" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Patch and export EDM
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $out = Join-Path $env:GITHUB_WORKSPACE "edm-artifacts"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          & $env:BLENDER_EXE --background --python "tools/dcs-edm/export_job.py" -- --job "edm-jobs/magura_quaternion_job.json" --artifact-dir "$out"
+          if ($LASTEXITCODE -ne 0) { throw "MAGURA quaternion EDM export failed." }
+          if (-not (Test-Path "$out/MAGURA_W6_SeaDragon_AIM9X_360.edm")) { throw "EDM output missing." }
+
+      - name: Upload fixed EDM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: magura-360-quaternion-fix-${{ github.run_number }}
+          path: edm-artifacts/**
+          if-no-files-found: error
+          retention-days: 30
