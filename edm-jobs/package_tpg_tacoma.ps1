@@ -47,7 +47,7 @@ declare_plugin("TPG Tacoma Recon", {
     installed = true,
     dirName = current_mod_path,
     fileMenuName = _("TPG Tacoma Recon"),
-    version = "2.0.0",
+    version = "3.0.0",
     state = "installed",
     developerName = "TPG",
     info = _("2016 Toyota Tacoma TRD Off Road 4x4 DCLB custom scout/recon ground vehicle."),
@@ -86,10 +86,10 @@ GT_t.CH_t.TPG_TACOMA_RECON = {
     max_acceleration = 4.2,
     min_turn_radius = 5.8,
 
-    X_gear_1 = 1.800,
+    X_gear_1 = 1.7855,
     Y_gear_1 = 0.0,
     Z_gear_1 = 0.405,
-    X_gear_2 = -1.771,
+    X_gear_2 = -1.7855,
     Y_gear_2 = 0.0,
     Z_gear_2 = 0.405,
 
@@ -101,8 +101,7 @@ GT_t.CH_t.TPG_TACOMA_RECON = {
 GT = {}
 GT_t.ws = 0
 
--- Proven wheeled IFV registration path. This is the path that made v1.0.3
--- appear correctly in this user's DCS Mission Editor.
+-- Proven registration path from the user's working ME build.
 set_recursive_metatable(GT, GT_t.generic_wheel_IFV)
 set_recursive_metatable(GT.chassis, GT_t.CH_t.TPG_TACOMA_RECON)
 
@@ -142,8 +141,8 @@ add_surface_unit(GT)
 Set-Content -Path (Join-Path $db "TPG_Tacoma_Recon.lua") -Value $vehicle -Encoding UTF8
 
 $readme = @'
-TPG Tacoma Recon v2.0
-=====================
+TPG Tacoma Recon v3.0 — FBX Quality Rebuild
+===========================================
 
 INSTALL
 Delete any older TPG_Tacoma_Recon folder.
@@ -153,10 +152,9 @@ Copy the single TPG_Tacoma_Recon folder directly into:
 MISSION EDITOR
 Ground Units -> Armor -> [TPG] Tacoma Scout/Recon
 
-MODEL REBUILD
-This is a full visual rebuild of the first proof-of-concept geometry.
-The previous blocky body, crude wheel arches, cog-like tires and physical
-mud blocks were removed.
+V3 MODEL BASIS
+The rejected procedural v2 body is no longer the vehicle foundation. V3 uses the
+supplied 2016 Tacoma FBX body geometry and preserves the proven DCS registration.
 
 Reference locked to the user's photographs:
 - 2016 Toyota Tacoma TRD Off Road 4x4 DCLB
@@ -166,30 +164,31 @@ Reference locked to the user's photographs:
 - low-profile black roof/platform racks
 - Black Oak cowl/ditch lights
 - stock-height stance
-- TRD Off Road style machined/dark 16-inch wheels
-- all-terrain tires
+- TRD Off Road style wheels / all-terrain tires
 - black fender flares
-- slim front LED bar visible in the supplied frontal photo
-- heavy-duty rear bumper
+- slim front LED bar present in the supplied FBX/reference front
+- custom rear bumper
 - amber auxiliary reverse/backup lights
 - fictional DCS plate, not the owner's real plate
 - no invented weapons or recon equipment
 
-ANIMATION
-DCS ground vehicle standard:
-- argument 8 = wheel rotation
-- argument 9 = steering
-
-The EDM uses separate steering and wheel-roll pivot objects. Front-wheel steering
-is centered at frame 100 (argument 0) before export, fixing the prior permanent
-left-turn pose.
+V3 QA FIXES
+- FBX wheel transforms corrected to the actual 3.571 m wheelbase
+- front/rear wheel centers aligned with the chassis declaration
+- front steering and all-wheel roll use DCS arguments 9 and 8
+- neutral export is frame 100
+- tube sliders and cowl-light brackets are baked to mesh for EDM export
+- camper shell is shaped/tapered instead of the rejected rectangular block
+- rack support feet prevent the prior floating-rack appearance
+- rear bumper is positioned behind the body shell
+- side/rear text is baked to mesh rather than left as unsupported Blender font objects
 
 PERFORMANCE
 113 mph = 181.856 km/h = 50.5156 m/s
 '@
 Set-Content -Path (Join-Path $pkg "README.txt") -Value $readme -Encoding UTF8
 
-$zip = Join-Path $root "TPG_Tacoma_Recon_v2.0_DCS_DropIn.zip"
+$zip = Join-Path $root "TPG_Tacoma_Recon_v3.0_DCS_DropIn.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }
 Compress-Archive -Path $pkg -DestinationPath $zip -CompressionLevel Optimal
 
