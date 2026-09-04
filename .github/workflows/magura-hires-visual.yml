@@ -1,0 +1,163 @@
+name: MAGURA AIM-9X 360 HiRes Visual Build
+
+on:
+  push:
+    paths:
+      - ".github/workflows/magura-hires-visual.yml"
+      - "edm-jobs/magura_hires_texturegen.py"
+      - "edm-jobs/magura_hires_visual_patch.py"
+      - "edm-jobs/magura_hires_destroyed_visibility.py"
+      - "edm-jobs/magura_hires_intact_job.json"
+      - "edm-jobs/magura_hires_destroyed_job.json"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  export-magura-hires:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      BLENDER_VERSION: "4.1.1"
+      BLENDER_URL: "https://download.blender.org/release/Blender4.1/blender-4.1.1-windows-x64.zip"
+      ED_EXPORTER_COMMIT: "5f03ba70ec96ca6ce68028eabc786ecd97f9cf93"
+      FIX3_BLEND_SHA256: "f0185c868e16c55625fe182df8e2e67afc4984f1a753e8bb699539652913e357"
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Download exact live-proven FIX3 geometry baseline
+        uses: actions/download-artifact@v4
+        with:
+          name: magura-360-fix3-yaw-tracking-1
+          path: base-artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: Thepropergrip/Working-USV
+          run-id: 33883233696
+
+      - name: Verify exact proven base blend
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $blend = "base-artifact/MAGURA_W6_SeaDragon_AIM9X_360.blend"
+          if (-not (Test-Path $blend)) { throw "Proven FIX3 blend missing: $blend" }
+          $sha = (Get-FileHash -Algorithm SHA256 $blend).Hash.ToLower()
+          if ($sha -ne $env:FIX3_BLEND_SHA256) {
+            throw "Wrong FIX3 base blend. Expected $env:FIX3_BLEND_SHA256 got $sha"
+          }
+          Write-Host "Verified exact FIX3 blend: $sha"
+
+      - name: Set up texture-generation Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Generate original HiRes marine/composite texture set
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          python -m pip install --disable-pip-version-check --quiet pillow numpy
+          python edm-jobs/magura_hires_texturegen.py
+          $required = @(
+            "MAGURA_W6_Hull_Base_HiRes.png",
+            "MAGURA_W6_Hull_Normal_HiRes.png",
+            "MAGURA_W6_Hull_RoughMet_HiRes.png",
+            "MAGURA_W6_Deck_Base_HiRes.png",
+            "MAGURA_W6_Deck_RoughMet_HiRes.png",
+            "MAGURA_W6_Metal_Base_HiRes.png",
+            "MAGURA_W6_Metal_RoughMet_HiRes.png",
+            "MAGURA_W6_Armor_Base_HiRes.png",
+            "MAGURA_W6_Armor_RoughMet_HiRes.png",
+            "MAGURA_W6_Optics_Base_HiRes.png",
+            "MAGURA_W6_Optics_RoughMet_HiRes.png",
+            "MAGURA_W6_Glass_Filter_HiRes.png",
+            "MAGURA_W6_Damage_Base_HiRes.png"
+          )
+          foreach ($name in $required) {
+            $p = Join-Path "hires-generated/textures" $name
+            if (-not (Test-Path $p)) { throw "Missing generated texture: $p" }
+            if ((Get-Item $p).Length -lt 1024) { throw "Generated texture too small: $p" }
+          }
+
+      - name: Install Blender 4.1.1 portable
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $zip = Join-Path $env:RUNNER_TEMP "blender-$env:BLENDER_VERSION.zip"
+          $dir = Join-Path $env:RUNNER_TEMP "blender-$env:BLENDER_VERSION"
+          Invoke-WebRequest -Uri $env:BLENDER_URL -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $dir -Force
+          $exe = Get-ChildItem -Path $dir -Filter blender.exe -Recurse | Select-Object -First 1
+          if (-not $exe) { throw "Blender executable not found." }
+          "BLENDER_EXE=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Install official Eagle Dynamics EDM exporter
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $src = Join-Path $env:RUNNER_TEMP "Blender-EDM-Exporter"
+          git clone --filter=blob:none https://github.com/EagleDynamics/Blender-EDM-Exporter.git $src
+          git -C $src checkout $env:ED_EXPORTER_COMMIT
+          $scripts = Join-Path $env:GITHUB_WORKSPACE ".edm-blender-scripts"
+          $addons = Join-Path $scripts "addons"
+          New-Item -ItemType Directory -Force -Path $addons | Out-Null
+          Copy-Item -Recurse -Force (Join-Path $src "io_scene_edm") (Join-Path $addons "io_scene_edm")
+          $upper = Join-Path $addons "io_scene_edm/Materials"
+          $temp  = Join-Path $addons "io_scene_edm/__materials_casefix"
+          if (Test-Path $upper) {
+            Rename-Item -Path $upper -NewName "__materials_casefix"
+            Rename-Item -Path $temp -NewName "materials"
+          }
+          $native = Join-Path $addons "io_scene_edm/pyedm_311.pyd"
+          if (-not (Test-Path $native)) { throw "Official native pyedm_311.pyd missing." }
+          "BLENDER_USER_SCRIPTS=$scripts" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "EDM_EXPORTER_COMMIT=$env:ED_EXPORTER_COMMIT" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Patch true HiRes visuals and export intact EDM
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $out = Join-Path $env:GITHUB_WORKSPACE "edm-artifacts"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          & $env:BLENDER_EXE --background --python "tools/dcs-edm/export_job.py" -- --job "edm-jobs/magura_hires_intact_job.json" --artifact-dir "$out"
+          if ($LASTEXITCODE -ne 0) { throw "MAGURA HiRes intact EDM export failed." }
+          if (-not (Test-Path "$out/MAGURA_W6_SeaDragon_AIM9X_360_HiRes.edm")) { throw "HiRes intact EDM missing." }
+          if (-not (Test-Path "$out/MAGURA_W6_SeaDragon_AIM9X_360_HiRes.blend")) { throw "HiRes patched blend missing." }
+          if (-not (Test-Path "hires-generated/visual-qa.json")) { throw "Visual QA report missing." }
+
+      - name: Export HiRes destroyed EDM from same patched blend
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $out = Join-Path $env:GITHUB_WORKSPACE "edm-artifacts"
+          & $env:BLENDER_EXE --background --python "tools/dcs-edm/export_job.py" -- --job "edm-jobs/magura_hires_destroyed_job.json" --artifact-dir "$out"
+          if ($LASTEXITCODE -ne 0) { throw "MAGURA HiRes destroyed EDM export failed." }
+          if (-not (Test-Path "$out/MAGURA_W6_SeaDragon_AIM9X_360_HiRes_destroyed.edm")) { throw "HiRes destroyed EDM missing." }
+
+      - name: Stage visual assets and build report
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $out = Join-Path $env:GITHUB_WORKSPACE "edm-artifacts"
+          Copy-Item -Recurse -Force "hires-generated/textures" (Join-Path $out "Textures")
+          Copy-Item -Force "hires-generated/visual-qa.json" (Join-Path $out "visual-qa.json")
+          $hashes = @()
+          Get-ChildItem -Path $out -File -Recurse | ForEach-Object {
+            $hashes += [pscustomobject]@{
+              file = $_.FullName.Substring($out.Length + 1).Replace('\\','/')
+              bytes = $_.Length
+              sha256 = (Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLower()
+            }
+          }
+          $hashes | ConvertTo-Json -Depth 4 | Out-File -FilePath (Join-Path $out "artifact-hashes.json") -Encoding utf8
+          Write-Host "HiRes artifact files: $($hashes.Count)"
+
+      - name: Upload MAGURA HiRes visual artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: magura-aim9x-360-hires-${{ github.run_number }}
+          path: edm-artifacts/**
+          if-no-files-found: error
+          retention-days: 30
