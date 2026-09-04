@@ -107,7 +107,7 @@ jobs:
           if (-not $edm) { throw "No EDM produced for ${{ matrix.variant }}." }
           $edm | ForEach-Object { Write-Host "$($_.Name) $($_.Length) bytes" }
 
-      - name: Dump intact geometry QA meshes
+      - name: Generate intact geometry and visual QA
         if: matrix.variant == 'intact'
         shell: pwsh
         run: |
@@ -115,10 +115,33 @@ jobs:
           $blend = Get-ChildItem "edm-artifacts" -Filter "*.blend" -File | Select-Object -First 1
           if (-not $blend) { throw "Intact build .blend missing for QA preview." }
           & $env:BLENDER_EXE --background "$($blend.FullName)" --python "edm-jobs/render_tpg_tacoma_preview.py"
-          if ($LASTEXITCODE -ne 0) { throw "Tacoma QA mesh dump failed." }
-          if (-not (Test-Path "edm-artifacts\TPG_Tacoma_Recon_QA_neutral.obj")) { throw "Tacoma neutral QA OBJ missing." }
-          if (-not (Test-Path "edm-artifacts\TPG_Tacoma_Recon_QA_steer_left.obj")) { throw "Tacoma left-steer QA OBJ missing." }
-          if (-not (Test-Path "edm-artifacts\TPG_Tacoma_Recon_QA_steer_right.obj")) { throw "Tacoma right-steer QA OBJ missing." }
+          if ($LASTEXITCODE -ne 0) { throw "Tacoma QA generation failed." }
+
+          $requiredObj = @(
+            "TPG_Tacoma_Recon_QA_neutral.obj",
+            "TPG_Tacoma_Recon_QA_steer_left.obj",
+            "TPG_Tacoma_Recon_QA_steer_right.obj"
+          )
+          foreach ($name in $requiredObj) {
+            $p = Join-Path "edm-artifacts" $name
+            if (-not (Test-Path $p)) { throw "Tacoma QA OBJ missing: $name" }
+            if ((Get-Item $p).Length -lt 10000) { throw "Tacoma QA OBJ unexpectedly small: $name" }
+          }
+
+          $requiredPng = @(
+            "TPG_Tacoma_Recon_QA_side_driver.png",
+            "TPG_Tacoma_Recon_QA_front.png",
+            "TPG_Tacoma_Recon_QA_rear.png",
+            "TPG_Tacoma_Recon_QA_front_3q.png",
+            "TPG_Tacoma_Recon_QA_rear_3q.png",
+            "TPG_Tacoma_Recon_QA_steer_left.png",
+            "TPG_Tacoma_Recon_QA_steer_right.png"
+          )
+          foreach ($name in $requiredPng) {
+            $p = Join-Path "edm-artifacts" $name
+            if (-not (Test-Path $p)) { throw "Tacoma visual QA PNG missing: $name" }
+            if ((Get-Item $p).Length -lt 10000) { throw "Tacoma visual QA PNG unexpectedly small: $name" }
+          }
 
       - name: Upload ${{ matrix.variant }}
         uses: actions/upload-artifact@v4
