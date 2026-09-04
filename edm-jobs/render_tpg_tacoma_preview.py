@@ -58,7 +58,8 @@ def look_at(obj, target):
 
 def ensure_qa_scene():
     scene=bpy.context.scene
-    scene.render.engine='BLENDER_EEVEE_NEXT'
+    # Blender 4.1.1 exposes the Eevee renderer as BLENDER_EEVEE, not EEVEE_NEXT.
+    scene.render.engine='BLENDER_EEVEE'
     scene.render.resolution_x=1600
     scene.render.resolution_y=900
     scene.render.resolution_percentage=100
@@ -120,6 +121,8 @@ def render_views():
         path=outdir/f'TPG_Tacoma_Recon_QA_{name}.png'
         bpy.context.scene.render.filepath=str(path)
         bpy.ops.render.render(write_still=True)
+        if not path.exists() or path.stat().st_size < 10000:
+            raise RuntimeError(f'QA render missing or too small: {path}')
         print(f'[TPG QA] rendered {path} {path.stat().st_size} bytes')
 
     # Steering-specific close side views to prove all front wheel visual detail follows arg 9.
@@ -129,6 +132,8 @@ def render_views():
         path=outdir/f'TPG_Tacoma_Recon_QA_{name}.png'
         bpy.context.scene.render.filepath=str(path)
         bpy.ops.render.render(write_still=True)
+        if not path.exists() or path.stat().st_size < 10000:
+            raise RuntimeError(f'QA steering render missing or too small: {path}')
         print(f'[TPG QA] rendered {path} {path.stat().st_size} bytes')
     bpy.context.scene.frame_set(100)
 
