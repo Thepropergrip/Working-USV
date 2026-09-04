@@ -1,6 +1,6 @@
 import os, runpy
-# Assemble the validated five-part FBX-derived payload before every export.
+# Assemble the validated FBX-derived payload before every export.
 runpy.run_path("edm-jobs/prepare_tpg_tacoma_payload.py", run_name="__main__")
 os.environ["TPG_TACOMA_DESTROYED"]="0"
 os.environ["TPG_TACOMA_LOD"]="0"
-runpy.run_path("edm-jobs/build_tpg_tacoma.py", run_name="__main__")
+runpy.run_path("edm-jobs/build_tpg_tacoma_quality_patch.py", run_name="__main__")
