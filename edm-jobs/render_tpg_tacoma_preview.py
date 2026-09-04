@@ -58,10 +58,14 @@ def look_at(obj, target):
 
 def ensure_qa_scene():
     scene=bpy.context.scene
-    # Blender 4.1.1 exposes the Eevee renderer as BLENDER_EEVEE, not EEVEE_NEXT.
-    scene.render.engine='BLENDER_EEVEE'
-    scene.render.resolution_x=1600
-    scene.render.resolution_y=900
+    # GitHub Windows runners have no reliable OpenGL context in background mode.
+    # Use Cycles CPU so visual QA is truly headless and cannot crash on WGL/Eevee init.
+    scene.render.engine='CYCLES'
+    scene.cycles.device='CPU'
+    scene.cycles.samples=12
+    scene.cycles.use_denoising=False
+    scene.render.resolution_x=1280
+    scene.render.resolution_y=720
     scene.render.resolution_percentage=100
     scene.render.image_settings.file_format='PNG'
     scene.render.film_transparent=False
@@ -84,7 +88,13 @@ def ensure_qa_scene():
     ground=bpy.data.objects.new('QA_RENDER_GROUND',me)
     scene.collection.objects.link(ground)
     me.from_pydata([(-15,-15,0),(15,-15,0),(15,15,0),(-15,15,0)],[],[(0,1,2,3)])
-    gm=bpy.data.materials.new('QA_RENDER_GROUND_MAT');gm.diffuse_color=(0.12,0.13,0.14,1)
+    gm=bpy.data.materials.new('QA_RENDER_GROUND_MAT')
+    gm.diffuse_color=(0.12,0.13,0.14,1)
+    gm.use_nodes=True
+    bsdf=gm.node_tree.nodes.get('Principled BSDF')
+    if bsdf:
+        bsdf.inputs['Base Color'].default_value=(0.12,0.13,0.14,1)
+        bsdf.inputs['Roughness'].default_value=0.88
     me.materials.append(gm)
 
     for i,(loc,energy,size) in enumerate([
