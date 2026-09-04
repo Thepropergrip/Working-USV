@@ -2,12 +2,17 @@ $ErrorActionPreference = "Stop"
 $root = Join-Path $env:GITHUB_WORKSPACE "edm-artifacts"
 $pkg = Join-Path $root "TPG_Electrical_Substation_V1_LIGHT_RIG"
 $shapes = Join-Path $pkg "Shapes"
+$textures = Join-Path $pkg "Textures"
 $db = Join-Path $pkg "Database"
-New-Item -ItemType Directory -Force -Path $shapes,$db | Out-Null
+New-Item -ItemType Directory -Force -Path $shapes,$textures,$db | Out-Null
 
 $src = Join-Path $root "TPG_Electrical_Substation_V1_LIGHT_RIG.edm"
 if (-not (Test-Path $src)) { throw "Missing light rig EDM" }
 Copy-Item $src $shapes -Force
+
+if (Test-Path (Join-Path $root "Textures")) {
+    Copy-Item (Join-Path $root "Textures\*") $textures -Force
+}
 
 $entry = @'
 declare_plugin("TPG Electrical Substation V1.0 LIGHT RIG",
@@ -15,11 +20,12 @@ declare_plugin("TPG Electrical Substation V1.0 LIGHT RIG",
     installed = true,
     dirName = current_mod_path,
     displayName = _("TPG Electrical Substation V1.0 LIGHT RIG"),
-    version = "1.0.0",
+    version = "1.0.1",
     state = "installed",
-    info = _("Dedicated nine-light illumination rig matched to the TPG Electrical Substation V1.0 footprint")
+    info = _("Dedicated nine-light illumination rig with explicit EDM bounding and light boxes")
 })
 mount_vfs_model_path(current_mod_path.."/Shapes")
+mount_vfs_texture_path(current_mod_path.."/Textures")
 dofile(current_mod_path.."/Database/db_tpg_substation_light_rig.lua")
 plugin_done()
 '@
@@ -56,13 +62,18 @@ add_structure({
 Set-Content -Path (Join-Path $db "db_tpg_substation_light_rig.lua") -Value $dbLua -Encoding UTF8
 
 $readme = @'
-TPG Electrical Substation V1.0 LIGHT RIG
-=========================================
+TPG Electrical Substation V1.0 LIGHT RIG v1.0.1
+================================================
 
 Purpose:
-Dedicated light-only asset matched to the exact footprint of TPG Electrical Substation V1.0.
-This follows the proven DCS pattern used by dedicated airfield/flood-light effect assets: the light
-source is its own object instead of being embedded inside the visible structure.
+Dedicated lighting asset matched to the exact footprint of TPG Electrical Substation V1.0.
+
+This revision fixes the DCS "Model has invalid bounding box" rejection seen in the prior rig:
+- tiny lamp-head meshes now use real Eagle Dynamics EDM materials and export as actual triangles
+- a real buried EDM-material anchor mesh exists near origin
+- an explicit EDM BOUNDING_BOX spans the entire rig
+- an explicit EDM LIGHT_BOX spans the illumination volume
+- the nine strong warm-white EDM spot lights are retained
 
 Install:
 Copy TPG_Electrical_Substation_V1_LIGHT_RIG into:
@@ -74,9 +85,7 @@ Static Objects -> Structures -> TPG Substation Light Rig
 Placement:
 1. Place the normal TPG Electrical Substation V1.0.
 2. Place TPG Substation Light Rig at the EXACT SAME coordinates and heading.
-3. The rig geometry is intentionally buried/invisible; only its nine EDM spot lights should be visible at night.
-
-The rig uses nine strong warm-white spot lights aligned to the substation yard light positions.
+3. The tiny rig lamp-head meshes occupy the same fixture locations as the visible substation lights.
 '@
 Set-Content -Path (Join-Path $pkg "README.txt") -Value $readme -Encoding UTF8
 
