@@ -13,6 +13,8 @@ on:
       - "edm-jobs/build_tpg_tacoma_*.py"
       - "edm-jobs/tpg_tacoma_*.json"
       - "edm-jobs/tacoma_fbx_mesh_b64/**"
+      - "edm-jobs/tacoma_lzma_b64/**"
+      - "edm-jobs/prepare_tpg_tacoma_payload.py"
       - "edm-jobs/package_tpg_tacoma.ps1"
       - "edm-jobs/render_tpg_tacoma_preview.py"
       - "tools/dcs-edm/**"
@@ -25,6 +27,8 @@ on:
       - "edm-jobs/build_tpg_tacoma_*.py"
       - "edm-jobs/tpg_tacoma_*.json"
       - "edm-jobs/tacoma_fbx_mesh_b64/**"
+      - "edm-jobs/tacoma_lzma_b64/**"
+      - "edm-jobs/prepare_tpg_tacoma_payload.py"
       - "edm-jobs/package_tpg_tacoma.ps1"
       - "edm-jobs/render_tpg_tacoma_preview.py"
       - "tools/dcs-edm/**"
@@ -134,6 +138,9 @@ jobs:
             "TPG_Tacoma_Recon_QA_rear.png",
             "TPG_Tacoma_Recon_QA_front_3q.png",
             "TPG_Tacoma_Recon_QA_rear_3q.png",
+            "TPG_Tacoma_Recon_QA_side_driver_clay.png",
+            "TPG_Tacoma_Recon_QA_front_clay.png",
+            "TPG_Tacoma_Recon_QA_front_3q_clay.png",
             "TPG_Tacoma_Recon_QA_steer_left.png",
             "TPG_Tacoma_Recon_QA_steer_right.png"
           )
