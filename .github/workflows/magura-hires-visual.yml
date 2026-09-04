@@ -6,6 +6,8 @@ on:
       - ".github/workflows/magura-hires-visual.yml"
       - "edm-jobs/magura_hires_texturegen.py"
       - "edm-jobs/magura_hires_visual_patch.py"
+      - "edm-jobs/magura_hires_refinement_v2.py"
+      - "edm-jobs/magura_hires_visual_driver.py"
       - "edm-jobs/magura_hires_destroyed_visibility.py"
       - "edm-jobs/magura_hires_intact_job.json"
       - "edm-jobs/magura_hires_destroyed_job.json"
