@@ -22,7 +22,7 @@ jobs:
     env:
       BLENDER_VERSION: "4.1.1"
       BLENDER_URL: "https://download.blender.org/release/Blender4.1/blender-4.1.1-windows-x64.zip"
-      ED_EXPORTER_COMMIT: "5f03ba70ec96ca6ce68028eabc786ecd97f9cf93"
+      ED_EXPORTER_COMMIT: "e03f94ed15c577822e0842923b054c456626770a"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -58,7 +58,12 @@ jobs:
             Rename-Item $temp "materials"
           }
           if (-not (Test-Path (Join-Path $lower "__init__.py"))) { throw "ED material package normalization failed." }
-          if (-not (Test-Path (Join-Path $addons "io_scene_edm\pyedm_311.pyd"))) { throw "Official pyedm_311.pyd missing." }
+          $pyd = Join-Path $addons "io_scene_edm\pyedm_311.pyd"
+          if (-not (Test-Path $pyd)) { throw "Official pyedm_311.pyd missing." }
+          $pydItem = Get-Item $pyd
+          $pydHash = (Get-FileHash $pyd -Algorithm SHA256).Hash
+          Write-Host "ED exporter commit: $env:ED_EXPORTER_COMMIT"
+          Write-Host "pyedm_311.pyd: $($pydItem.Length) bytes SHA256=$pydHash"
           "BLENDER_USER_SCRIPTS=$scripts" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Export light rig
