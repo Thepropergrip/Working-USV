@@ -8,17 +8,20 @@ import bpy
 ROOT = Path(os.environ.get("GITHUB_WORKSPACE", os.getcwd()))
 PATCH = ROOT / "edm-jobs" / "magura_hires_visual_patch.py"
 FLATTEN = ROOT / "edm-jobs" / "magura_hires_texture_flatten_v3.py"
-REFINE = ROOT / "edm-jobs" / "magura_hires_refinement_v3.py"
+REFINE_V3 = ROOT / "edm-jobs" / "magura_hires_refinement_v3.py"
+REFINE_V4 = ROOT / "edm-jobs" / "magura_hires_refinement_v4.py"
 REPORT = ROOT / "hires-generated" / "visual-qa.json"
 
 # Core visual-only material/launcher detail pass.
 runpy.run_path(str(PATCH), run_name="__main__")
 
-# V3 correction: remove the over-strong periodic hull normal that showed up as
-# stern/radius wrinkles in DCS, then replace the failed V1/V2 bow overlays with
-# one continuous embedded fairing + flush fender extensions and dense bumper.
+# Keep V3 in the chain because it replaces the original low-density bow bumper
+# using the original transform/dimensions. V4 then deletes every experimental
+# additive helper/detail object and applies the final corrective shading/material
+# treatment seen in DCS QA.
 runpy.run_path(str(FLATTEN), run_name="__main__")
-runpy.run_path(str(REFINE), run_name="__main__")
+runpy.run_path(str(REFINE_V3), run_name="__main__")
+runpy.run_path(str(REFINE_V4), run_name="__main__")
 
 
 def ensure_uv(obj):
@@ -55,7 +58,7 @@ def convert_curve_to_mesh(obj):
 fixed = []
 converted = []
 for obj in list(bpy.data.objects):
-    if not obj.name.startswith(("HiRes_", "HiResV3_")):
+    if not obj.name.startswith(("HiRes_", "HiResV3_", "HiResV4_")):
         continue
     if obj.type == "CURVE":
         obj = convert_curve_to_mesh(obj)
@@ -71,7 +74,7 @@ if REPORT.exists():
     report = json.loads(REPORT.read_text(encoding="utf-8"))
 report["uv_safe_visual_objects"] = len(fixed)
 report["converted_visual_curves"] = converted
-report["uv_policy"] = "UVMap guaranteed for every HiRes/HiResV3 visual mesh before EDM export"
+report["uv_policy"] = "UVMap guaranteed for every surviving HiRes/V3/V4 visual mesh before EDM export"
 REPORT.write_text(json.dumps(report, indent=2), encoding="utf-8")
 
 print(f"MAGURA_HIRES_UV_READY={len(fixed)}")
