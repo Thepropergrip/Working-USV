@@ -2,18 +2,18 @@ import bpy, math, os, sys
 from pathlib import Path
 from mathutils import Vector
 
-# Dedicated light rig for the TPG electrical substation.
-# The visible substation remains a separate asset. This rig supplies nine real EDM
-# spot lights plus real ED-material lamp-head geometry, an explicit EDM BOUNDING_BOX,
-# and an explicit EDM LIGHT_BOX. Earlier builds used plain Blender materials; the ED
-# exporter reported those meshes as 0 triangles, leaving a light-only EDM that DCS
-# rejected with "Model has invalid bounding box".
+# DIAGNOSTIC dedicated light rig for the TPG electrical substation.
+# This build intentionally uses exaggerated visible geometry so we can prove whether
+# DCS instantiates the asset at all. Nine full-height high-visibility masts sit at the
+# exact light positions, with oversized emissive lamp heads and the same real EDM spot
+# lights used by the prior rig.
 
 HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 import tpg_substation_common as common
 from objects_custom_props import get_edm_props
+from enums import NodeSocketInDefaultEnum
 
 bpy.ops.object.select_all(action='SELECT')
 bpy.ops.object.delete(use_global=False)
@@ -31,15 +31,38 @@ LIGHTS = [
     (-50.0,  30.0, 8.0 + YARD_RISE),
 ]
 
-# Real ED default materials. These produce actual exported triangles and texture
-# references instead of the zero-triangle result from ordinary Blender materials.
-lamp_mat = common.edm_mat(
-    'TPG_LIGHT_RIG_LampHead',
-    (0.72, 0.56, 0.30),
-    rough=0.48,
-    metal=0.10,
-    variation=0.01,
+# Proper ED materials. Magenta masts are intentionally unnatural and highly visible
+# in daylight; emissive heads remain obvious at night even if the real light nodes fail.
+mast_mat = common.edm_mat(
+    'TPG_LIGHT_RIG_DIAG_Magenta',
+    (0.95, 0.02, 0.68),
+    rough=0.42,
+    metal=0.08,
+    variation=0.008,
 )
+base_mat = common.edm_mat(
+    'TPG_LIGHT_RIG_DIAG_Base',
+    (0.95, 0.18, 0.02),
+    rough=0.55,
+    metal=0.05,
+    variation=0.008,
+)
+head_mat = common.edm_mat(
+    'TPG_LIGHT_RIG_DIAG_Head',
+    (1.0, 0.82, 0.42),
+    rough=0.20,
+    metal=0.02,
+    variation=0.004,
+)
+# Reuse the head base-color texture as an emissive source.
+try:
+    group = head_mat.node_tree.nodes.get('Group')
+    tex = next(n for n in head_mat.node_tree.nodes if n.bl_idname == 'ShaderNodeTexImage')
+    head_mat.node_tree.links.new(tex.outputs['Color'], group.inputs[NodeSocketInDefaultEnum.EMISSIVE])
+    group.inputs[NodeSocketInDefaultEnum.EMISSIVE_VALUE].default_value = 12.0
+except Exception as exc:
+    print(f'TPG DIAG emissive setup warning: {exc}')
+
 anchor_mat = common.edm_mat(
     'TPG_LIGHT_RIG_Anchor',
     (0.015, 0.015, 0.015),
@@ -48,8 +71,7 @@ anchor_mat = common.edm_mat(
     variation=0.005,
 )
 
-# Small buried real mesh near origin. This is not the bounding box itself; it simply
-# guarantees ordinary renderable geometry exists in the EDM.
+# Ordinary renderable geometry at origin.
 common.box(
     'TPG_LIGHT_RIG_BURIED_ANCHOR',
     (0.0, 0.0, -0.45),
@@ -58,14 +80,13 @@ common.box(
     bevel=0.0,
 )
 
-# Explicit EDM bounding box spanning every emitter and the ground-side anchor.
-# Official ED exporter maps SPECIAL_TYPE='BOUNDING_BOX' to model.setBBox().
-min_x = min(p[0] for p in LIGHTS) - 1.0
-max_x = max(p[0] for p in LIGHTS) + 1.0
-min_y = min(p[1] for p in LIGHTS) - 1.0
-max_y = max(p[1] for p in LIGHTS) + 1.0
+# Explicit EDM bounds covering the entire diagnostic rig.
+min_x = min(p[0] for p in LIGHTS) - 1.5
+max_x = max(p[0] for p in LIGHTS) + 1.5
+min_y = min(p[1] for p in LIGHTS) - 1.5
+max_y = max(p[1] for p in LIGHTS) + 1.5
 min_z = -0.75
-max_z = max(p[2] for p in LIGHTS) + 0.75
+max_z = max(p[2] for p in LIGHTS) + 1.25
 center = ((min_x + max_x) / 2.0, (min_y + max_y) / 2.0, (min_z + max_z) / 2.0)
 size = (max_x - min_x, max_y - min_y, max_z - min_z)
 
@@ -76,39 +97,63 @@ bbox.dimensions = size
 bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
 get_edm_props(bbox).SPECIAL_TYPE = 'BOUNDING_BOX'
 
-# Separate light box slightly larger than the physical bounds so DCS has a defined
-# light-culling volume around all nine emitters.
 bpy.ops.mesh.primitive_cube_add(size=1.0, location=center)
 lightbox = bpy.context.object
 lightbox.name = 'TPG_LIGHT_RIG_EXPLICIT_LIGHT_BOX'
-lightbox.dimensions = (size[0] + 8.0, size[1] + 8.0, size[2] + 4.0)
+lightbox.dimensions = (size[0] + 10.0, size[1] + 10.0, size[2] + 6.0)
 bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
 get_edm_props(lightbox).SPECIAL_TYPE = 'LIGHT_BOX'
 
 for i, (x, y, z) in enumerate(LIGHTS):
-    # Actual exported lamp head at every emitter. These are small enough to sit
-    # inside the visible substation fixture when both assets share coordinates.
+    mast_bottom = YARD_RISE
+    mast_top = z - 0.35
+    mast_h = mast_top - mast_bottom
+
+    # Big orange base plate, fluorescent-magenta 8 m mast, and oversized emissive head.
     common.box(
-        f'TPG_RIG_HEAD_{i:02d}',
+        f'TPG_RIG_DIAG_BASE_{i:02d}',
+        (x, y, YARD_RISE + 0.08),
+        (1.10, 1.10, 0.16),
+        base_mat,
+        bevel=0.04,
+    )
+    common.cyl(
+        f'TPG_RIG_DIAG_MAST_{i:02d}',
+        (x, y, mast_bottom + mast_h / 2.0),
+        0.22,
+        mast_h,
+        mast_mat,
+        verts=36,
+    )
+    common.box(
+        f'TPG_RIG_DIAG_HEAD_{i:02d}',
         (x, y, z),
-        (0.44, 0.28, 0.14),
-        lamp_mat,
-        bevel=0.02,
+        (1.10, 0.72, 0.42),
+        head_mat,
+        bevel=0.06,
+    )
+    # Small crossbar to make the mast silhouette unmistakable.
+    common.box(
+        f'TPG_RIG_DIAG_CROSSBAR_{i:02d}',
+        (x, y, z - 0.42),
+        (1.50, 0.18, 0.18),
+        mast_mat,
+        bevel=0.03,
     )
 
     data = bpy.data.lights.new(name=f'TPG_RIG_SPOT_{i:02d}_DATA', type='SPOT')
-    data.energy = 5200.0
+    data.energy = 6500.0
     data.color = (1.0, 0.84, 0.62)
     data.use_custom_distance = True
-    data.cutoff_distance = 78.0
-    data.spot_size = math.radians(76.0)
+    data.cutoff_distance = 90.0
+    data.spot_size = math.radians(80.0)
     data.spot_blend = 0.62
     data.shadow_soft_size = 0.55
     data.specular_factor = 0.70
 
     obj = bpy.data.objects.new(f'TPG_RIG_SPOT_{i:02d}', data)
     bpy.context.collection.objects.link(obj)
-    obj.location = (x, y, z - 0.04)
+    obj.location = (x, y, z - 0.18)
 
     target = Vector((x * 0.72, y * 0.72, 0.30))
     direction = target - Vector(obj.location)
@@ -118,13 +163,13 @@ for i, (x, y, z) in enumerate(LIGHTS):
     for attr, val in (
         ('LIGHT_SOFTNESS', 0.60),
         ('LIGHT_VOLUME_RADIUS_FACTOR', 1.0),
-        ('LIGHT_VOLUME_DENSITY_FACTOR', 0.10),
+        ('LIGHT_VOLUME_DENSITY_FACTOR', 0.12),
         ('LIGHT_VOLUME_NEAR_DISTANCE', 0.20),
     ):
         if hasattr(props, attr):
             setattr(props, attr, val)
 
 print(
-    f'TPG Substation Light Rig built with {len(LIGHTS)} EDM spot lights, '
-    f'real ED-material emitter meshes, explicit BOUNDING_BOX {size}, and LIGHT_BOX'
+    f'TPG Substation Light Rig DIAGNOSTIC built: {len(LIGHTS)} visible 8m magenta masts, '
+    f'oversized emissive heads, EDM spot lights, BOUNDING_BOX {size}, and LIGHT_BOX'
 )
