@@ -1,12 +1,12 @@
-import bpy, math, os, sys
+import bpy, os, sys
 from pathlib import Path
 from mathutils import Vector
 
-# DIAGNOSTIC dedicated light rig for the TPG electrical substation.
-# This build intentionally uses exaggerated visible geometry so we can prove whether
-# DCS instantiates the asset at all. Nine full-height high-visibility masts sit at the
-# exact light positions, with oversized emissive lamp heads and the same real EDM spot
-# lights used by the prior rig.
+# BUILD 8 DIAGNOSTIC: geometry + EDM connectors ONLY.
+# DCS 2.9.29.27468 rejects the Blender-exported EDM SpotLight node with
+# "Wrong light version", even when exported with the current official ED exporter.
+# Therefore this scene deliberately contains ZERO Blender LIGHT objects.
+# The DCS-side Lua owns the actual spotlights and references the named connectors.
 
 HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
@@ -31,8 +31,6 @@ LIGHTS = [
     (-50.0,  30.0, 8.0 + YARD_RISE),
 ]
 
-# Proper ED materials. Magenta masts are intentionally unnatural and highly visible
-# in daylight; emissive heads remain obvious at night even if the real light nodes fail.
 mast_mat = common.edm_mat(
     'TPG_LIGHT_RIG_DIAG_Magenta',
     (0.95, 0.02, 0.68),
@@ -54,7 +52,6 @@ head_mat = common.edm_mat(
     metal=0.02,
     variation=0.004,
 )
-# Reuse the head base-color texture as an emissive source.
 try:
     group = head_mat.node_tree.nodes.get('Group')
     tex = next(n for n in head_mat.node_tree.nodes if n.bl_idname == 'ShaderNodeTexImage')
@@ -71,7 +68,7 @@ anchor_mat = common.edm_mat(
     variation=0.005,
 )
 
-# Ordinary renderable geometry at origin.
+# Conventional renderable geometry at the origin.
 common.box(
     'TPG_LIGHT_RIG_BURIED_ANCHOR',
     (0.0, 0.0, -0.45),
@@ -80,7 +77,7 @@ common.box(
     bevel=0.0,
 )
 
-# Explicit EDM bounds covering the entire diagnostic rig.
+# Explicit bounds covering the whole rig. These are control objects, not render meshes.
 min_x = min(p[0] for p in LIGHTS) - 1.5
 max_x = max(p[0] for p in LIGHTS) + 1.5
 min_y = min(p[1] for p in LIGHTS) - 1.5
@@ -104,12 +101,26 @@ lightbox.dimensions = (size[0] + 10.0, size[1] + 10.0, size[2] + 6.0)
 bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
 get_edm_props(lightbox).SPECIAL_TYPE = 'LIGHT_BOX'
 
+
+def make_connector(name, location, rotation):
+    empty = bpy.data.objects.new(name, None)
+    bpy.context.collection.objects.link(empty)
+    empty.empty_display_type = 'ARROWS'
+    empty.empty_display_size = 0.50
+    empty.location = location
+    empty.rotation_euler = rotation
+    props = get_edm_props(empty)
+    props.SPECIAL_TYPE = 'CONNECTOR'
+    if hasattr(props, 'CONNECTOR_EXT'):
+        props.CONNECTOR_EXT = ''
+    return empty
+
+
 for i, (x, y, z) in enumerate(LIGHTS):
     mast_bottom = YARD_RISE
     mast_top = z - 0.35
     mast_h = mast_top - mast_bottom
 
-    # Big orange base plate, fluorescent-magenta 8 m mast, and oversized emissive head.
     common.box(
         f'TPG_RIG_DIAG_BASE_{i:02d}',
         (x, y, YARD_RISE + 0.08),
@@ -132,7 +143,6 @@ for i, (x, y, z) in enumerate(LIGHTS):
         head_mat,
         bevel=0.06,
     )
-    # Small crossbar to make the mast silhouette unmistakable.
     common.box(
         f'TPG_RIG_DIAG_CROSSBAR_{i:02d}',
         (x, y, z - 0.42),
@@ -141,35 +151,18 @@ for i, (x, y, z) in enumerate(LIGHTS):
         bevel=0.03,
     )
 
-    data = bpy.data.lights.new(name=f'TPG_RIG_SPOT_{i:02d}_DATA', type='SPOT')
-    data.energy = 6500.0
-    data.color = (1.0, 0.84, 0.62)
-    data.use_custom_distance = True
-    data.cutoff_distance = 90.0
-    data.spot_size = math.radians(80.0)
-    data.spot_blend = 0.62
-    data.shadow_soft_size = 0.55
-    data.specular_factor = 0.70
-
-    obj = bpy.data.objects.new(f'TPG_RIG_SPOT_{i:02d}', data)
-    bpy.context.collection.objects.link(obj)
-    obj.location = (x, y, z - 0.18)
-
+    light_pos = Vector((x, y, z - 0.18))
     target = Vector((x * 0.72, y * 0.72, 0.30))
-    direction = target - Vector(obj.location)
-    obj.rotation_euler = direction.to_track_quat('-Z', 'Y').to_euler()
+    direction = target - light_pos
+    aim_rot = direction.to_track_quat('-Z', 'Y').to_euler()
+    make_connector(f'TPG_YARD_SPOT_{i}', light_pos, aim_rot)
 
-    props = get_edm_props(obj)
-    for attr, val in (
-        ('LIGHT_SOFTNESS', 0.60),
-        ('LIGHT_VOLUME_RADIUS_FACTOR', 1.0),
-        ('LIGHT_VOLUME_DENSITY_FACTOR', 0.12),
-        ('LIGHT_VOLUME_NEAR_DISTANCE', 0.20),
-    ):
-        if hasattr(props, attr):
-            setattr(props, attr, val)
+# Hard assertion: the rejected pyedm SpotLight path must not exist in this scene.
+light_objects = [o.name for o in bpy.context.scene.objects if o.type == 'LIGHT']
+if light_objects:
+    raise RuntimeError(f'BUILD 8 must contain no Blender LIGHT objects, found: {light_objects}')
 
 print(
-    f'TPG Substation Light Rig DIAGNOSTIC built: {len(LIGHTS)} visible 8m magenta masts, '
-    f'oversized emissive heads, EDM spot lights, BOUNDING_BOX {size}, and LIGHT_BOX'
+    f'TPG Substation Light Rig BUILD 8 built: {len(LIGHTS)} visible magenta masts, '
+    f'{len(LIGHTS)} EDM connectors, BOUNDING_BOX {size}, LIGHT_BOX, ZERO embedded light nodes'
 )
