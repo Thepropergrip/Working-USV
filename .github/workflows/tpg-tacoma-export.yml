@@ -149,15 +149,15 @@ jobs:
           $ErrorActionPreference = "Stop"
           & "edm-jobs/package_tpg_tacoma.ps1"
           if (-not $?) { throw "Packaging failed." }
-          $zip = "edm-artifacts\TPG_Tacoma_Recon_v2.0_DCS_DropIn.zip"
+          $zip = "edm-artifacts\TPG_Tacoma_Recon_v3.0_DCS_DropIn.zip"
           if (-not (Test-Path $zip)) { throw "Final DCS ZIP missing." }
 
       - name: Upload final DCS package
         uses: actions/upload-artifact@v4
         with:
-          name: TPG-Tacoma-Recon-v2.0-DCS-DropIn
+          name: TPG-Tacoma-Recon-v3.0-DCS-DropIn
           path: |
-            edm-artifacts/TPG_Tacoma_Recon_v2.0_DCS_DropIn.zip
+            edm-artifacts/TPG_Tacoma_Recon_v3.0_DCS_DropIn.zip
             edm-artifacts/TPG_Tacoma_Recon/**
           if-no-files-found: error
           retention-days: 30
