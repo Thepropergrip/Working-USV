@@ -1,0 +1,7 @@
+{
+  "mode": "blend",
+  "blend": "base-artifact/MAGURA_W6_SeaDragon_AIM9X_360.blend",
+  "post_script": "edm-jobs/magura_fix2_pointer_connector_patch.py",
+  "output": "MAGURA_W6_SeaDragon_AIM9X_360.edm",
+  "save_blend": true
+}
