@@ -40,9 +40,9 @@ declare_plugin("TPG Electrical Substation V1.0 LIGHTS",
     installed = true,
     dirName = current_mod_path,
     displayName = _("TPG Electrical Substation V1.0 LIGHTS"),
-    version = "1.0.1-LIGHTS",
+    version = "1.0.2-LIGHTS-FORT",
     state = "installed",
-    info = _("High-detail electrical substation static structure with DCS-managed yard lighting")
+    info = _("High-detail electrical substation registered as an immobile Fortification so DCS services its yard lights")
 })
 mount_vfs_model_path(current_mod_path.."/Shapes")
 mount_vfs_texture_path(current_mod_path.."/Textures")
@@ -52,7 +52,12 @@ plugin_done()
 Set-Content -Path (Join-Path $pkg "entry.lua") -Value $entry -Encoding UTF8
 
 $dbLua = @'
-local GT = {}
+-- LIGHTS edition deliberately uses the full stationary Ground Unit/Fortification
+-- registration path.  The visual asset is still completely immobile and unarmed,
+-- but this causes DCS to instantiate the unit-side light controller used by working
+-- light towers and other illuminated stationary ground equipment.
+GT = {}
+GT_t.ws = 0
 set_recursive_metatable(GT, GT_t.generic_stationary)
 set_recursive_metatable(GT.chassis, GT_t.CH_t.STATIC)
 
@@ -70,9 +75,20 @@ GT.Rate = 100
 GT.DetectionRange = 0
 GT.ThreatRange = 0
 GT.mapclasskey = "P0091000076"
-GT.attribute = {wsType_Static, wsType_Standing, "Structures"}
-GT.category = "Structures"
 GT.positioning = "BYNORMAL"
+GT.CustomAimPoint = {0, 4.0, 0}
+
+-- Critical difference from the failed Static/Structures registrations.
+-- This remains a stationary, zero-mobility, no-weapon object, but DCS sees it via
+-- the same Ground Unit -> Fortification path used by illuminated light-tower assets.
+GT.attribute = {
+    wsType_Ground,
+    wsType_Tank,
+    wsType_NoWeapon,
+    wsType_GenericFort,
+    "Fortifications",
+}
+GT.category = "Fortification"
 
 GT.shape_table_data = {
     {
@@ -89,27 +105,28 @@ GT.shape_table_data = {
     }
 }
 
--- DCS-managed yard lighting.  The previous LIGHTS build relied only on embedded
--- EDM Blender lights; those can appear in ModelViewer but be ignored by DCS for
--- static/ground objects.  These spotlights are created by the DCS light system and
--- anchored to named EDM CONNECTORs exported at the nine existing yard fixtures.
 local yard_lights = {}
 for i = 0, 8 do
     yard_lights[#yard_lights + 1] = {
         typename = "spotlight",
         connector = "TPG_YARD_SPOT_" .. i,
         color = {1.0, 0.82, 0.58},
-        intensity_max = 7.5,
-        angle_max = math.rad(36),
+        intensity_max = 12.0,
+        angle_max = math.rad(38),
         dont_change_color = true,
         angle_change_rate = 0,
     }
 end
 
+-- Keep an explicit top-level collection, matching DCS light-data conventions,
+-- rather than handing the runtime only a bare numbered subcollection.
 GT.lights = {
-    [1] = {
-        typename = "collection",
-        lights = yard_lights,
+    typename = "collection",
+    lights = {
+        [1] = {
+            typename = "collection",
+            lights = yard_lights,
+        },
     },
 }
 
@@ -119,7 +136,7 @@ GT = nil
 Set-Content -Path (Join-Path $db "db_tpg_electrical_substation_lights.lua") -Value $dbLua -Encoding UTF8
 
 $readme = @'
-TPG Electrical Substation V1.0 LIGHTS v1.0.1
+TPG Electrical Substation V1.0 LIGHTS v1.0.2
 =============================================
 
 Install:
@@ -129,17 +146,22 @@ Copy the folder "TPG_Electrical_Substation_V1_LIGHTS" into:
 This version coexists with:
   TPG_Electrical_Substation_V1
 
-Mission Editor:
-Static Objects -> Structures -> TPG Electrical Substation V1.0 LIGHTS
+Mission Editor placement for this corrected build:
+  Ground Units -> Fortification -> TPG Electrical Substation V1.0 LIGHTS
 
-LIGHTS v1.0.1 repair:
+Important:
+- It is intentionally registered as a stationary Fortification rather than a plain Static Structure.
+- It has a STATIC chassis, no weapons, no detection/threat capability and no usable mobility.
+- This registration is specifically to make DCS instantiate the unit-side lighting controller.
+
+LIGHTS v1.0.2:
 - Same high-fidelity substation geometry/layout
-- Nine existing yard fixtures now export named EDM connectors
-- Lua GT.lights block asks the DCS ground/static light system to create nine spotlights
-- Warm self-illuminated EDM lamp lenses provide visible fixture glow
-- Embedded EDM spot lights retained as a secondary fallback
+- Nine existing yard fixtures retain named EDM connectors
+- DCS unit-side light collection drives nine warm spotlights
+- EDM lamp lenses remain self-illuminated
+- Embedded EDM spot lights remain as a secondary fallback
 - Destroyed model has no active connector/spot lights
-- Separate shape/database/plugin names preserve coexistence with the non-LIGHTS asset
+- Original non-LIGHTS static-structure edition remains unchanged and can coexist
 '@
 Set-Content -Path (Join-Path $pkg "README.txt") -Value $readme -Encoding UTF8
 
