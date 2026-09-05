@@ -1,4 +1,4 @@
-import bpy
+import bpy, os
 
 # FBX-v3 hero-body correction pass.
 # Keep the validated FBX truck, wheel animation, DCS registration/tuning, LOD plumbing
@@ -16,9 +16,8 @@ for obj in list(bpy.data.objects):
     if obj.name.startswith(REMOVE_PREFIXES):
         bpy.data.objects.remove(obj, do_unlink=True)
 
-paint = bpy.data.materials.get("TPG_TACOMA_Burnt") if bpy.context.scene.get("TPG_TACOMA_DESTROYED", False) else None
-if paint is None:
-    paint = bpy.data.materials.get("TPG_TACOMA_Quicksand_4T8")
+destroyed = os.environ.get("TPG_TACOMA_DESTROYED", "0") == "1"
+paint = bpy.data.materials.get("TPG_TACOMA_Burnt" if destroyed else "TPG_TACOMA_Quicksand_4T8")
 glass = bpy.data.materials.get("TPG_TACOMA_TintedGlass")
 if paint is None or glass is None:
     raise RuntimeError("Tacoma hero-body materials are missing")
@@ -46,14 +45,14 @@ def make_mesh(name, verts, faces, material, smooth=True, bevel=0.0):
     return obj
 
 
-# Cross-section points run driver-to-passenger.  Compared with the old 1.72 m-wide
-# rectangular box, the upper shell shoulders pull inward and the crown rounds over.
-# Three longitudinal stations introduce a subtle fore/aft taper so the topper follows
-# the Tacoma bed rather than reading as a cargo crate.
+# Cross-section points run driver-to-passenger. Compared with the old rectangular
+# box, the upper shell shoulders pull inward and the crown rounds over. Three
+# longitudinal stations introduce a subtle fore/aft taper so the topper follows the
+# Tacoma bed and visually meets the cab roof instead of reading as a cargo crate.
 stations = [
-    (-1.03, 0.98, 0.00),   # front: close to cab, slightly narrower/lower
-    (-1.84, 1.00, 0.04),   # center: gentle crown
-    (-2.68, 0.985, 0.015), # rear: mild taper
+    (-1.03, 0.98, 0.00),
+    (-1.84, 1.00, 0.04),
+    (-2.68, 0.985, 0.015),
 ]
 profile = [
     (-0.870, 1.155),
@@ -79,15 +78,13 @@ for s in range(len(stations) - 1):
     b = (s + 1) * n
     for i in range(n - 1):
         faces.append((a + i, a + i + 1, b + i + 1, b + i))
-# Close front/rear faces with clean n-gons.
 faces.append(tuple(range(n - 1, -1, -1)))
 rear0 = (len(stations) - 1) * n
 faces.append(tuple(rear0 + i for i in range(n)))
 make_mesh("CAMPER_HERO_SHELL_V4", verts, faces, paint, smooth=True, bevel=0.022)
 
-
-# Trapezoidal side glazing follows the shell shoulder rather than floating as a flat
-# oversized rectangle.  It is intentionally inset from the front/rear shell pillars.
+# Trapezoidal side glazing follows the shell shoulder and leaves proper painted
+# pillars instead of floating as an oversized rectangular insert.
 for side in (-1, 1):
     y = side * 0.846
     win = [
