@@ -17,9 +17,15 @@ FEATHER = 0.5 * FT
 OVERALL_W = 9.0 * FT
 HALF_TOTAL = OVERALL_W / 2.0
 HALF_TRAVEL = TRAVEL_W / 2.0
-TERRAIN_Z = 0.010
-ROAD_EDGE_Z = 0.085
-CROWN_Z = 0.120
+
+# v1.0.3 surface profile: deliberately low and subtle.
+# The previous 120 mm crown / 85 mm lane edge made the 0.5 ft feather act like
+# a small berm and created a visible dark/shadow line where it met terrain.
+# Keep only enough elevation to avoid coplanar z-fighting while preserving a
+# realistic slight dirt-road crown and smooth drive-on behavior.
+TERRAIN_Z = 0.003
+ROAD_EDGE_Z = 0.015
+CROWN_Z = 0.035
 COLL_BOTTOM_Z = -1.0
 TEX_SCALE_M = 2.0
 RAMP = min(4.0, max(2.5, LENGTH_FT * 0.20)) * FT
@@ -57,9 +63,7 @@ def add_ribbon(builder, centerline, blend_func):
             dx=centerline[i+1][0]-centerline[i-1][0]
             dy=centerline[i+1][1]-centerline[i-1][1]
         mag=max(1e-9, math.hypot(dx,dy))
-        # IMPORTANT: use the RIGHT normal so OFFSETS increasing from negative to
-        # positive produces left-to-right rows. The old left-normal reversed every
-        # ribbon face and DCS back-face culled all straight/turn/arm surfaces.
+        # Right normal: preserves upward-facing ribbon winding in DCS.
         nx=dy/mag
         ny=-dx/mag
         b=blend_func(i, centerline)
@@ -144,8 +148,7 @@ elif KIND=='t': builder=build_junction(False)
 elif KIND=='intersection': builder=build_junction(True)
 else: raise RuntimeError(f'Unknown ROAD_KIND={KIND}')
 
-# QA: every visible quad must face upward in Blender Z. This specifically guards
-# against the previous ribbon winding bug that made DCS cull the road surfaces.
+# QA: every visible quad must face upward in Blender Z.
 def face_nz(face):
     a=builder.verts[face[0]]; b=builder.verts[face[1]]; c=builder.verts[face[2]]
     ab=(b[0]-a[0], b[1]-a[1], b[2]-a[2])
@@ -160,6 +163,12 @@ print(f'[TPG QA] {ASSET}: {len(builder.faces)} visible faces all upward-wound')
 mesh=bpy.data.meshes.new(ASSET+'_MESH')
 mesh.from_pydata(builder.verts,[],builder.faces); mesh.update()
 road=bpy.data.objects.new(ASSET,mesh); bpy.context.collection.objects.link(road)
+
+# Smooth the subtle crown/feather transitions. The old flat-shaded transition
+# accentuated a dark strip where the outer feather met terrain.
+for poly in mesh.polygons:
+    poly.use_smooth = True
+
 uv=mesh.uv_layers.new(name='UVMap')
 for poly in mesh.polygons:
     for li in poly.loop_indices:
@@ -187,7 +196,13 @@ w,h=ao.size
 a=np.array(ao.pixels[:],dtype=np.float32).reshape((-1,4))[:,0]
 r=np.array(ro.pixels[:],dtype=np.float32).reshape((-1,4))[:,0]
 out=np.empty((w*h,4),dtype=np.float32)
-out[:,0]=a; out[:,1]=r; out[:,2]=0.0; out[:,3]=1.0
+# DCS RoughMet: R=AO, G=roughness, B=metallic. Dirt should be strongly matte.
+# Preserve a little source roughness variation, but force the green channel into
+# the 0.95..1.00 range so direct sun does not produce a polished/specular sheen.
+out[:,0]=a
+out[:,1]=0.95 + 0.05*r
+out[:,2]=0.0
+out[:,3]=1.0
 rm=tex_dir/'TPG_Ground109_RoughMet.png'
 ri=bpy.data.images.new('TPG_Ground109_RoughMet',width=w,height=h,alpha=True)
 ri.colorspace_settings.name='Non-Color'; ri.pixels.foreach_set(out.ravel())
@@ -205,12 +220,12 @@ cfaces=list(faces)+[tuple(n+i for i in reversed(f)) for f in faces]
 edge_count={}
 for f in faces:
     for i in range(len(f)):
-        a,b=f[i],f[(i+1)%len(f)]
-        key=tuple(sorted((a,b)))
+        aidx,bidx=f[i],f[(i+1)%len(f)]
+        key=tuple(sorted((aidx,bidx)))
         edge_count[key]=edge_count.get(key,0)+1
-for (a,b),count in edge_count.items():
+for (aidx,bidx),count in edge_count.items():
     if count==1:
-        cfaces.append((a,b,n+b,n+a))
+        cfaces.append((aidx,bidx,n+bidx,n+aidx))
 cm=bpy.data.meshes.new(ASSET+'_COLLISION_MESH')
 cm.from_pydata(cverts,[],cfaces); cm.update()
 col=bpy.data.objects.new(ASSET+'_COLLISION',cm); bpy.context.collection.objects.link(col)
@@ -223,5 +238,11 @@ road['LENGTH_FT']=LENGTH_FT if KIND=='straight' else 0
 road['OVERALL_WIDTH_FT']=9.0
 road['TRAVELED_WIDTH_FT']=8.0
 road['VISIBLE_FACE_WINDING']='UPWARD_VALIDATED'
+road['SURFACE_PROFILE']='LOW_SEAM_V103'
+road['ROUGHNESS_GREEN_MIN']=0.95
+road['TERRAIN_Z_M']=TERRAIN_Z
+road['ROAD_EDGE_Z_M']=ROAD_EDGE_Z
+road['CROWN_Z_M']=CROWN_Z
 road['COLLISION_BOTTOM_Z_M']=COLL_BOTTOM_Z
-print(f'[TPG DIRT ROAD SET WINDING FIX] built {ASSET}: kind={KIND}, verts={len(builder.verts)}, faces={len(builder.faces)}')
+print(f'[TPG DIRT ROAD SET v1.0.3] built {ASSET}: kind={KIND}, verts={len(builder.verts)}, faces={len(builder.faces)}')
+print(f'[TPG v1.0.3] profile terrain={TERRAIN_Z:.3f}m edge={ROAD_EDGE_Z:.3f}m crown={CROWN_Z:.3f}m, matte roughness >=0.95')
