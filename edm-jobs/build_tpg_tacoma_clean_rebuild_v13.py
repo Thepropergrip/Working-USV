@@ -2,11 +2,9 @@ import bpy, os
 from collections import defaultdict
 
 # Tacoma FBX-v3 canonical clean rebuild pass.
-# This replaces the accumulated hero/V11/V12 body-patch chain. It starts from the
-# original FBX-derived body produced by build_tpg_tacoma.py, then performs ONE bounded
-# source-mesh reconstruction guided by the user's real 2016 Tacoma reference photos.
-# DCS mechanics are intentionally untouched: proven wheel hierarchy, arg 8 wheel roll,
-# arg 9 steering, unit tuning, LOD/destroyed plumbing, exporter path and packaging.
+# One bounded correction from the original source-derived Tacoma mesh. No V4/V11/V12
+# patch chain is resumed here. DCS wheel hierarchy/animations and gameplay tuning stay
+# outside this visual pass and remain untouched.
 
 WHEEL_TARGETS = {
     "FBX_Cylinder_STEER":      ( 1.74, -0.805),
@@ -25,71 +23,64 @@ body = bpy.data.objects.get("FBX_Plane.001")
 if body is None or body.type != 'MESH':
     raise RuntimeError("Missing source-derived Tacoma body FBX_Plane.001")
 
+# Measured from the source payload in CI: source body z 0.562..1.323, roof x about
+# -1.29..0.745. These bounds intentionally use the real FBX coordinate system rather
+# than the obsolete procedural-model coordinates that caused V12/V13's zero-hit cab pass.
 stats = defaultdict(int)
-
-# Canonical source-body reconstruction. All coordinates below are bounded to the
-# original FBX body and avoid doors, wheel openings, lower fenders and the DCS rig.
 for v in body.data.vertices:
     x, y, z = v.co.x, v.co.y, v.co.z
     ay = abs(y)
 
-    # Third-gen Tacoma greenhouse: keep the upper cab noticeably more vertical and
-    # square than the V12 candidate. The old chain narrowed the crown and then tried
-    # to push shoulders back out; here the shape is solved once from the source mesh.
-    if -0.86 <= x <= 1.05 and z >= 1.34:
-        tz = min(1.0, max(0.0, (z - 1.34) / 0.34))
-        # Only a mild roof taper from the lower cab instead of the old 7% pinch.
-        v.co.y *= (1.0 - 0.025 * tz)
-        stats["greenhouse"] += 1
-
-        # Square the upper side shoulders directly from the source mesh.
+    # Double-cab upper body. Keep the Tacoma roof/cab visibly square and only mildly
+    # tapered. This acts on the source mesh itself, including its window/aperture shape.
+    if -1.34 <= x <= 0.82 and z >= 1.105:
+        tz = min(1.0, max(0.0, (z - 1.105) / 0.218))
+        if ay >= 0.46:
+            v.co.y *= (1.0 + 0.020 * tz)
+            stats["greenhouse"] += 1
+        # Push the upper roof shoulder outward, not the center crown. The source roof
+        # is already numerically flat at ~1.323 m; the old problem was rounded shoulders.
         ay2 = abs(v.co.y)
-        if 0.44 <= ay2 <= 0.78 and z >= 1.48:
-            band = 1.0 - min(1.0, abs(ay2 - 0.61) / 0.17)
-            move = 0.028 * min(1.0, max(0.0, (z - 1.48) / 0.20)) * band
+        if 0.58 <= ay2 <= 0.79 and z >= 1.235:
+            band = 1.0 - min(1.0, abs(ay2 - 0.69) / 0.11)
+            move = 0.020 * band * min(1.0, max(0.0, (z - 1.235) / 0.088))
             v.co.y += move if v.co.y >= 0 else -move
             stats["shoulders"] += 1
-
-        # Flatten the roof crown decisively. This is the hard visual correction for
-        # the V12 van-like/domed silhouette while preserving the roof edge vertices.
-        if z > 1.64 and abs(v.co.y) <= 0.60:
-            v.co.z = 1.64 + (z - 1.64) * 0.24
+        # Clamp only tiny roof crown excursions so the top reads as a Tacoma roof.
+        if z >= 1.305 and ay <= 0.66:
+            v.co.z = min(v.co.z, 1.3215)
             stats["roof"] += 1
 
-    # Sharpen the hood/cowl/A-pillar break by standing the upper windshield/header
-    # farther forward. Lower pillar bases and doors stay source-derived.
-    if 0.42 <= x <= 1.12 and z >= 1.36:
-        tz = min(1.0, max(0.0, (z - 1.36) / 0.36))
-        tx = min(1.0, max(0.0, (x - 0.42) / 0.70))
-        v.co.x += 0.150 * tz * (0.55 + 0.45 * tx)
+    # Stand the windshield/header up from the source geometry. Front is +X. Move only
+    # upper/cowl vertices; doors, rocker, fenders, wheel openings and lower A pillars stay
+    # source-derived. This creates the sharper hood/cowl/windshield break in the photos.
+    if 0.52 <= x <= 1.18 and 1.105 <= z <= 1.318:
+        tz = min(1.0, max(0.0, (z - 1.105) / 0.213))
+        tx = 1.0 - min(1.0, max(0.0, (x - 0.52) / 0.66))
+        v.co.x += 0.080 * tz * (0.55 + 0.45 * tx)
         stats["windshield"] += 1
 
-    # Broad scoopless TRD Off-Road hood. Reduce crown slightly while preserving the
-    # source stamping; center-strip equalization is solved station-by-station below.
-    if 1.00 <= x <= 2.58 and 1.00 <= z <= 1.43:
-        tz = min(1.0, max(0.0, (z - 1.00) / 0.43))
-        v.co.y *= (1.0 - 0.020 * tz)
-        v.co.z -= 0.015 * tz
+    # Scoopless 2016 TRD Off-Road hood: retain the source stamping while reducing the
+    # center crown. This was already a valid source-mesh selection in the previous run.
+    if 1.00 <= x <= 2.47 and 1.00 <= z <= 1.323:
+        tz = min(1.0, max(0.0, (z - 1.00) / 0.323))
+        v.co.y *= (1.0 - 0.012 * tz)
+        v.co.z -= 0.010 * tz
         stats["hood"] += 1
 
-    # Retain the proven third-gen upper front-clip correction only.
+    # Conservative third-gen nose correction only; no lower-front procedural rebuild.
     if x >= 2.30 and 0.78 <= z <= 1.28:
-        tx = min(1.0, max(0.0, (x - 2.30) / 0.40))
+        tx = min(1.0, max(0.0, (x - 2.30) / 0.18))
         tz = min(1.0, max(0.0, (z - 0.78) / 0.50))
-        v.co.x += (0.020 + 0.022 * tz) * tx
-        v.co.y *= (1.0 - 0.012 * tx)
+        v.co.x += (0.016 + 0.014 * tz) * tx
+        v.co.y *= (1.0 - 0.008 * tx)
         stats["nose"] += 1
 
-    if x >= 2.12 and 1.24 <= z <= 1.46:
-        tx = min(1.0, max(0.0, (x - 2.12) / 0.46))
-        v.co.x += 0.022 * tx
-        v.co.z += 0.010 * tx
-
-# Equalize only the hood center from the hood's own shoulder heights at each x station.
+# Equalize only the hood center against shoulder heights at the same x station.
 stations = defaultdict(lambda: {"center": [], "shoulder": []})
 for v in body.data.vertices:
     x, y, z = v.co.x, v.co.y, v.co.z
-    if not (1.08 <= x <= 2.50 and 1.08 <= z <= 1.46):
+    if not (1.08 <= x <= 2.44 and 1.07 <= z <= 1.33):
         continue
     key = round(x / 0.04) * 0.04
     ay = abs(y)
@@ -97,7 +88,6 @@ for v in body.data.vertices:
         stations[key]["center"].append(v)
     elif 0.34 <= ay <= 0.58:
         stations[key]["shoulder"].append(v)
-
 for group in stations.values():
     if not group["center"] or len(group["shoulder"]) < 2:
         continue
@@ -107,13 +97,13 @@ for group in stations.values():
     for v in group["center"]:
         delta = target - v.co.z
         if abs(delta) > 0.0025:
-            v.co.z += max(-0.012, min(0.012, delta * 0.75))
+            v.co.z += max(-0.010, min(0.010, delta * 0.65))
             stats["hood_equalized"] += 1
-
 body.data.update()
 
-# Replace the base generated camper with the validated photo-matched shell, without
-# touching any FBX body or DCS mechanics.
+# Replace the base box camper with a low-profile ARE-style shell matched to the user's
+# real-truck reference. The source cab roof is ~1.323 m; the topper roof is therefore
+# ~1.34 m, not the erroneous 1.77 m of the rejected candidate.
 REMOVE_PREFIXES = (
     "CAMPER_BODY", "CAMPER_ROOF", "CAMPER_SIDE_GLASS_", "CAMPER_REAR_GLASS",
     "CAMPER_HERO_SHELL_",
@@ -130,10 +120,8 @@ if paint is None or glass is None:
 
 def make_mesh(name, verts, faces, material, smooth=True, bevel=0.0):
     me = bpy.data.meshes.new(name + "_mesh")
-    me.from_pydata(verts, [], faces)
-    me.update()
-    obj = bpy.data.objects.new(name, me)
-    bpy.context.collection.objects.link(obj)
+    me.from_pydata(verts, [], faces); me.update()
+    obj = bpy.data.objects.new(name, me); bpy.context.collection.objects.link(obj)
     me.materials.append(material)
     uv = me.uv_layers.new(name="UVMap")
     for loop in me.loops:
@@ -141,51 +129,61 @@ def make_mesh(name, verts, faces, material, smooth=True, bevel=0.0):
         uv.data[loop.index].uv = ((co.x * 0.18 + co.y * 0.13) % 1.0,
                                   (co.z * 0.32 + co.y * 0.17) % 1.0)
     if smooth:
-        for p in me.polygons:
-            p.use_smooth = True
+        for p in me.polygons: p.use_smooth = True
     if bevel > 0.0:
-        mod = obj.modifiers.new("hero_edge_soften", "BEVEL")
-        mod.width = bevel
-        mod.segments = 3
+        mod = obj.modifiers.new("hero_edge_soften", "BEVEL"); mod.width = bevel; mod.segments = 3
         bpy.context.view_layer.objects.active = obj
-        try:
-            bpy.ops.object.modifier_apply(modifier=mod.name)
-        except Exception:
-            pass
+        try: bpy.ops.object.modifier_apply(modifier=mod.name)
+        except Exception: pass
     return obj
 
 stations_shell = [
-    (-1.02, 0.985, -0.004), (-1.48, 1.000, 0.004),
-    (-2.16, 1.000, 0.004), (-2.68, 0.988, -0.006),
+    (-1.08, 0.990, -0.002), (-1.48, 1.000, 0.002),
+    (-2.16, 1.000, 0.002), (-2.68, 0.990, -0.004),
 ]
+# Cross-section ordered driver lower -> roof -> passenger lower. Nearly vertical shell
+# sides and a gently radiused roof match the reference much better than the tall dome.
 profile = [
-    (-0.870, 1.155), (-0.862, 1.500), (-0.835, 1.660), (-0.760, 1.730),
-    (-0.610, 1.770), (0.610, 1.770), (0.760, 1.730), (0.835, 1.660),
-    (0.862, 1.500), (0.870, 1.155),
+    (-0.865, 1.000), (-0.865, 1.185), (-0.842, 1.285), (-0.790, 1.325),
+    (-0.690, 1.342), (0.690, 1.342), (0.790, 1.325), (0.842, 1.285),
+    (0.865, 1.185), (0.865, 1.000),
 ]
 verts = []
 for x, width_scale, roof_add in stations_shell:
     for y, z in profile:
-        t = max(0.0, min(1.0, (z - 1.50) / 0.27))
+        t = max(0.0, min(1.0, (z - 1.18) / 0.17))
         verts.append((x, y * width_scale, z + roof_add * t))
 n = len(profile)
 faces = []
 for s in range(len(stations_shell) - 1):
     a, b = s*n, (s+1)*n
-    for i in range(n-1):
-        faces.append((a+i, a+i+1, b+i+1, b+i))
+    for i in range(n-1): faces.append((a+i, a+i+1, b+i+1, b+i))
 faces.append(tuple(range(n-1, -1, -1)))
 rear0 = (len(stations_shell)-1)*n
 faces.append(tuple(rear0+i for i in range(n)))
-make_mesh("CAMPER_HERO_SHELL_V13", verts, faces, paint, smooth=True, bevel=0.018)
+make_mesh("CAMPER_HERO_SHELL_V13", verts, faces, paint, smooth=True, bevel=0.014)
 
 for side in (-1, 1):
     y = side * 0.852
-    win = [(-2.47,y,1.305),(-2.47,y,1.555),(-2.40,y,1.625),(-1.33,y,1.625),(-1.25,y,1.585),(-1.22,y,1.305)]
+    win = [
+        (-2.48,y,1.055),(-2.48,y,1.220),(-2.40,y,1.292),
+        (-1.34,y,1.292),(-1.25,y,1.255),(-1.22,y,1.055)
+    ]
     face = [tuple(range(len(win)))] if side > 0 else [tuple(range(len(win)-1,-1,-1))]
     make_mesh(f"CAMPER_SIDE_GLASS_HERO_{side}", win, face, glass, smooth=False)
 rear_x = -2.687
-rear = [(rear_x,-0.650,1.300),(rear_x,0.650,1.300),(rear_x,0.650,1.555),(rear_x,0.585,1.625),(rear_x,-0.585,1.625),(rear_x,-0.650,1.555)]
+rear = [
+    (rear_x,-0.665,1.050),(rear_x,0.665,1.050),(rear_x,0.665,1.220),
+    (rear_x,0.600,1.292),(rear_x,-0.600,1.292),(rear_x,-0.665,1.220)
+]
 make_mesh("CAMPER_REAR_GLASS_HERO", rear, [tuple(range(len(rear)))], glass, smooth=False)
+
+# Base custom accessories were authored around the rejected 1.7-1.9 m procedural cap.
+# Re-seat the two roof platforms and hood ditch lights to the real source-body heights.
+for obj in bpy.data.objects:
+    if obj.name.startswith("RACK_RAIL_") or obj.name.startswith("RACK_BAR_"):
+        obj.location.z -= 0.455
+    elif obj.name.startswith("BLACK_OAK_") or obj.name.startswith("DITCH_BRACKET_"):
+        obj.location.z -= 0.205
 
 print("[TPG TACOMA CLEAN V13] canonical FBX source rebuild complete", dict(stats))
