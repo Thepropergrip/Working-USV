@@ -40,9 +40,9 @@ declare_plugin("TPG Electrical Substation V1.0 LIGHTS",
     installed = true,
     dirName = current_mod_path,
     displayName = _("TPG Electrical Substation V1.0 LIGHTS"),
-    version = "1.1.0-PROJECTOR",
+    version = "1.2.0-MASSUN-DONOR",
     state = "installed",
-    info = _("High-detail electrical substation with nine connector-driven DCS projector floods and emissive fixture lenses")
+    info = _("High-detail electrical substation with nine donor-matched legacy LightNode v1 floodlights embedded directly in the rendered EDM")
 })
 mount_vfs_model_path(current_mod_path.."/Shapes")
 mount_vfs_texture_path(current_mod_path.."/Textures")
@@ -52,139 +52,52 @@ plugin_done()
 Set-Content -Path (Join-Path $pkg "entry.lua") -Value $entry -Encoding UTF8
 
 $dbLua = @'
--- TPG Electrical Substation V1.0 LIGHTS v1.1.0
---
--- IMPORTANT CHANGE FROM THE FAILED TESTS:
---  * The visible substation EDM itself now contains nine correctly oriented EDM connectors.
---  * There are ZERO embedded Blender/official-exporter Light nodes (avoids Wrong light version).
---  * The fixture lenses are real emissive EDM material geometry.
---  * DCS projector lights use the current "Spot" + lamp_prototypes form WITHOUT the
---    intensity_max=20/24 override that made the previous projector tests effectively marker lights.
---  * A low-power omni fill is paired with each projector to provide local ambient spill.
+-- LIGHTS v1.2 uses the exact architecture proven by the user-provided working
+-- Massun92 watchtower EDM: legacy model::LightNode v1 SPOT nodes embedded directly
+-- in the rendered EDM. No GT.lights / lights_data controller is used.
 
-GT = {}
-GT_t.ws = 0
-set_recursive_metatable(GT, GT_t.generic_stationary)
-set_recursive_metatable(GT.chassis, GT_t.CH_t.STATIC)
-
-GT.chassis.life = 1200
-GT.visual.shape = "TPG_Electrical_Substation_V1_LIGHTS"
-GT.visual.shape_dstr = "TPG_Electrical_Substation_V1_LIGHTS_Destroyed"
-GT.visual.fire_size = 0.8
-GT.visual.fire_pos = {0, 0, 0}
-GT.visual.fire_time = 120
-GT.time_agony = 180
-
-GT.Name = "TPG_Electrical_Substation_V1_LIGHTS"
-GT.DisplayName = _("TPG Electrical Substation V1.0 LIGHTS")
-GT.Rate = 100
-GT.DetectionRange = 0
-GT.ThreatRange = 0
-GT.mapclasskey = "P0091000076"
-GT.positioning = "BYNORMAL"
-GT.CustomAimPoint = {0, 4.0, 0}
-
--- Stationary/unarmed ground object so DCS instantiates external-light services.
-GT.attribute = {
-    wsType_Ground,
-    wsType_Tank,
-    wsType_NoWeapon,
-    wsType_GenericFort,
-    "Fortifications",
-}
-GT.category = "Fortification"
-
-GT.shape_table_data = {
-    {
-        file = "TPG_Electrical_Substation_V1_LIGHTS",
-        life = 1200,
-        username = "TPG_Electrical_Substation_V1_LIGHTS",
-        desrt = "TPG_Electrical_Substation_V1_LIGHTS_Destroyed",
-        classname = "lLandVehicle",
-        positioning = "BYNORMAL",
-    },
-    {
-        name = "TPG_Electrical_Substation_V1_LIGHTS_Destroyed",
-        file = "TPG_Electrical_Substation_V1_LIGHTS_Destroyed",
-    }
-}
-
-local flood_lights = {}
-local projector_proto = nil
-if lamp_prototypes then
-    projector_proto = lamp_prototypes.LFS_P_27_1000 or lamp_prototypes.LFS_P_27_200
-end
-
-for i = 0, 8 do
-    local c = "TPG_YARD_FLOOD_" .. i
-
-    if projector_proto then
-        -- Current DCS projector form. Do NOT set intensity_max here: the prototype
-        -- owns projector output. Previous tests incorrectly clamped this to 20/24.
-        flood_lights[#flood_lights + 1] = {
-            typename = "Spot",
-            connector = c,
-            proto = projector_proto,
-            range = 110.0,
-            angle_min = math.rad(18.0),
-            angle_max = math.rad(68.0),
-            exposure = {{25, 0.075, 0.085}},
-            movable = false,
-            power_up_t = 0.01,
-            use_full_connector_position = true,
-            color = {1.0, 0.78, 0.56},
+local function add_structure(f)
+    f.shape_table_data = {
+        {
+            file = f.ShapeName,
+            life = f.Life,
+            username = f.Name,
+            desrt = f.ShapeNameDestr or "self",
+            classname = "lLandVehicle",
+            positioning = "BYNORMAL",
         }
-    else
-        -- Compatibility fallback matching the older DCS spotlight table family,
-        -- this time at real floodlight output instead of the failed 12/20 values.
-        flood_lights[#flood_lights + 1] = {
-            typename = "spotlight",
-            connector = c,
-            intensity_max = 1500.0,
-            color = {1.0, 0.78, 0.56},
-            angle_max = math.rad(68.0),
-            pos_correction = {0, 0, 0},
-            use_full_connector_position = true,
-            dont_change_color = true,
-            angle_change_rate = 0,
+    }
+
+    if f.ShapeNameDestr then
+        f.shape_table_data[#f.shape_table_data + 1] = {
+            name = f.ShapeNameDestr,
+            file = f.ShapeNameDestr,
         }
     end
 
-    -- Real ambient fill around each fixture. This is intentionally far stronger
-    -- than a 3.0 navigation light but much weaker than the projected flood.
-    flood_lights[#flood_lights + 1] = {
-        typename = "omnilight",
-        connector = c,
-        intensity_max = 35.0,
-        color = {1.0, 0.70, 0.46},
-        pos_correction = {0, 0, 0},
-        use_full_connector_position = true,
-    }
+    f.mapclasskey = "P0091000076"
+    f.attribute = {wsType_Static, wsType_Standing, "Structures"}
+    add_surface_unit(f)
 end
 
-local controller = {
-    typename = "collection",
-    lights = {
-        [1] = {
-            typename = "collection",
-            lights = flood_lights,
-        },
-    },
-}
-
--- Different DCS object families have historically looked at one or the other.
--- Assign both to the same controller rather than maintaining divergent tables.
-GT.lights = controller
-GT.lights_data = controller
-
-add_surface_unit(GT)
-GT = nil
+add_structure({
+    Name = "TPG_Electrical_Substation_V1_LIGHTS",
+    DisplayName = _("TPG Electrical Substation V1.0 LIGHTS"),
+    ShapeName = "TPG_Electrical_Substation_V1_LIGHTS",
+    ShapeNameDestr = "TPG_Electrical_Substation_V1_LIGHTS_Destroyed",
+    Life = 1200,
+    Rate = 100,
+    category = "Structures",
+    SeaObject = false,
+    isPutToWater = false,
+    numParking = 0,
+})
 '@
 Set-Content -Path (Join-Path $db "db_tpg_electrical_substation_lights.lua") -Value $dbLua -Encoding UTF8
 
 $readme = @'
-TPG Electrical Substation V1.0 LIGHTS v1.1.0 PROJECTOR
-======================================================
+TPG Electrical Substation V1.0 LIGHTS v1.2.0 MASSUN DONOR
+==========================================================
 
 INSTALL
 Delete/replace any older folder named:
@@ -193,25 +106,40 @@ Delete/replace any older folder named:
 Then copy this folder into:
   Saved Games\DCS\Mods\tech\
 
-This LIGHTS edition coexists with the untouched original:
+The untouched original remains compatible and can coexist:
   TPG_Electrical_Substation_V1
 
 MISSION EDITOR
-Ground Units -> Fortification -> TPG Electrical Substation V1.0 LIGHTS
+Static Objects -> Structures -> TPG Electrical Substation V1.0 LIGHTS
 
-WHAT CHANGED
-- Same high-fidelity substation layout and geometry.
-- Nine actual EDM connectors are embedded in the visible intact model and both LODs.
-- Each connector is aimed inward/down into the yard.
-- Warm emissive lens geometry is added to all nine existing lamp heads.
-- ZERO embedded Blender Light nodes, avoiding DCS 2.9.29 "Wrong light version".
-- Projected lights use DCS current typename="Spot" + lamp_prototypes projector form.
-- The failed Build 9 intensity_max=24 clamp is removed; projector output now comes from
-  LFS_P_27_1000 (or LFS_P_27_200 fallback).
-- Each fixture also has a 35-intensity omni fill for obvious local ambient spill.
-- Destroyed model intentionally has no connectors/emissive lenses.
+WHAT IS DIFFERENT
+This build is based directly on the user-provided known-working in-game Massun92
+M92_Container_watchtower_lights EDMs, not on guessed Lua projector definitions.
 
-This is not another invisible light-only overlay and does not require a second object.
+Binary inspection of the working donor showed its main floods are:
+- EDM v10 model::LightNode
+- LightNode __VERSION__ = 1
+- isSpot = 1
+- Color = {1.0, 0.9, 0.9}
+- Brightness = 0.07
+- Phi = 1.0
+- Theta = 0.5
+- Distance = 500.0
+
+The intact substation and LOD1/LOD2 are first exported by the official ED exporter
+with nine correctly aimed transform/connectors and emissive fixture lenses. A binary
+post-process then injects nine legacy LightNode v1 records using the exact donor values
+and parents each one to the corresponding fixture transform.
+
+There are:
+- NO modern official-exporter SpotLight/OmniLight nodes
+- NO GT.lights
+- NO GT.lights_data
+- NO secondary overlay object
+- NO light EDM hidden in the collision shell
+
+The far/destroyed models intentionally carry no active donor lights, matching the donor
+principle of omitting light nodes from the farthest LOD.
 '@
 Set-Content -Path (Join-Path $pkg "README.txt") -Value $readme -Encoding UTF8
 
