@@ -6,4 +6,5 @@ os.environ["TPG_TACOMA_LOD"]="0"
 runpy.run_path("edm-jobs/build_tpg_tacoma.py", run_name="__main__")
 runpy.run_path("edm-jobs/diagnose_tpg_tacoma_source_mesh.py", run_name="__main__")
 runpy.run_path("edm-jobs/build_tpg_tacoma_clean_rebuild_v13.py", run_name="__main__")
+runpy.run_path("edm-jobs/build_tpg_tacoma_photo_match_v14.py", run_name="__main__")
 runpy.run_path("edm-jobs/build_tpg_tacoma_wheel_closeout.py", run_name="__main__")
