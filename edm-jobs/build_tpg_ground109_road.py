@@ -124,12 +124,39 @@ road.data.materials.append(mat)
 for p in mesh.polygons:
     p.use_smooth = False
 
-# Low-profile collision shell so vehicles can ride on the raised road instead of terrain underneath.
-bpy.ops.mesh.primitive_cube_add(size=1.0, location=(0.0, 0.0, (CROWN_Z + BASE_Z)/2.0))
-col = bpy.context.object
-col.name = 'TPG_GROUND109_ROAD_30FT_COLLISION'
-col.dimensions = (ROAD_W, LENGTH, CROWN_Z - BASE_Z)
-bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+# Closed collision prism follows the exact crown + shoulders, but extends deeply
+# below terrain. Very thin wide DCS collision shells can be unreliable; this gives
+# the shell >1 m vertical depth without changing the visible road height.
+COLL_BOTTOM_Z = -1.0
+n = len(xs)
+cverts = []
+for y in ys:
+    for x, z in zip(xs, zs):
+        cverts.append((x, y, z))
+for y in ys:
+    for x in xs:
+        cverts.append((x, y, COLL_BOTTOM_Z))
+
+cfaces = []
+# Crown/shoulder top.
+for i in range(n - 1):
+    cfaces.append((i, i+1, n+i+1, n+i))
+# Flat underside.
+for i in range(n - 1):
+    cfaces.append((2*n+i, 3*n+i, 3*n+i+1, 2*n+i+1))
+# Long outer sides.
+cfaces.append((0, n, 3*n, 2*n))
+cfaces.append((n-1, 2*n-1, 4*n-1, 3*n-1))
+# End caps, split across crown strips.
+for i in range(n - 1):
+    cfaces.append((i, 2*n+i, 2*n+i+1, i+1))
+    cfaces.append((n+i, n+i+1, 3*n+i+1, 3*n+i))
+
+cmesh = bpy.data.meshes.new('TPG_Ground109_Road_30ft_CollisionMesh')
+cmesh.from_pydata(cverts, [], cfaces)
+cmesh.update()
+col = bpy.data.objects.new('TPG_GROUND109_ROAD_30FT_COLLISION', cmesh)
+bpy.context.collection.objects.link(col)
 if not hasattr(col, 'EDMProps'):
     raise RuntimeError('EDM object properties were not registered')
 col.EDMProps.SPECIAL_TYPE = 'COLLISION_SHELL'
@@ -140,8 +167,9 @@ road['ROAD_WIDTH_M'] = ROAD_W
 road['OVERALL_WIDTH_M'] = HALF_TOTAL*2
 road['CROWN_HEIGHT_M'] = CROWN_Z
 road['GRASS_MITIGATION'] = 'raised crowned roadbed with feathered shoulders; DCS has no per-static grass exclusion mask'
+road['COLLISION_BOTTOM_Z_M'] = COLL_BOTTOM_Z
 
 print(f'[TPG ROAD] length={LENGTH:.4f}m (30ft), road_width={ROAD_W:.4f}m (18ft), overall_width={HALF_TOTAL*2:.4f}m')
 print(f'[TPG ROAD] road surface z={ROAD_EDGE_Z:.3f}-{CROWN_Z:.3f}m, edge z={EDGE_Z:.3f}m')
 print('[TPG ROAD] exact source Color + NormalGL + generated AO/Roughness/Metal RoughMet linked to ED material')
-print('[TPG ROAD] collision shell added')
+print(f'[TPG ROAD] crowned collision prism follows visible road surface and extends to z={COLL_BOTTOM_Z:.3f}m')
