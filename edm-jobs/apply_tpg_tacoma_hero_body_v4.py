@@ -30,6 +30,17 @@ def make_mesh(name, verts, faces, material, smooth=True, bevel=0.0):
     obj = bpy.data.objects.new(name, me)
     bpy.context.collection.objects.link(obj)
     me.materials.append(material)
+
+    # Match the UV contract used by build_tpg_tacoma.py. ED's default material
+    # exporter requires a UV layer for the base/AORMS texture blocks even when the
+    # source textures are effectively flat-color swatches. Without this, pyedm
+    # aborts with "There is no such uv=None" on the hero replacement meshes.
+    uv = me.uv_layers.new(name="UVMap")
+    for loop in me.loops:
+        co = me.vertices[loop.vertex_index].co
+        uv.data[loop.index].uv = ((co.x * 0.18 + co.y * 0.13) % 1.0,
+                                  (co.z * 0.32 + co.y * 0.17) % 1.0)
+
     if smooth:
         for poly in me.polygons:
             poly.use_smooth = True
