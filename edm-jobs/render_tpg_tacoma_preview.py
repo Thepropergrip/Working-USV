@@ -79,6 +79,17 @@ def ensure_qa_scene():
     scene.render.film_transparent = False
     scene.view_settings.exposure = -0.6
 
+    # Collision meshes belong in the DCS EDM, but they must never appear in
+    # visual QA. The OBJ/bounds code already excludes them; make rendering use
+    # the same rule so the collision nose/main/rear boxes cannot masquerade as
+    # body geometry in front, side or 3/4 clay views.
+    hidden_collision = 0
+    for o in scene.objects:
+        if o.name.startswith('COLLISION_'):
+            o.hide_render = True
+            hidden_collision += 1
+    print(f'[TPG QA] hidden {hidden_collision} collision objects from renders')
+
     # The previous dark QA environment swallowed the truck's black glass/rack/trim
     # and made the body look much flatter than the underlying FBX wire geometry.
     scene.world.color = (0.28, 0.29, 0.30)
