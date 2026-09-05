@@ -1,0 +1,6 @@
+{
+  "mode": "script",
+  "script": "edm-jobs/build_tpg_ground109_road.py",
+  "output": "TPG_GROUND109_ROAD_30FT.edm",
+  "save_blend": true
+}
