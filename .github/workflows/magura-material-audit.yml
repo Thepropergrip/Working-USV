@@ -1,0 +1,59 @@
+name: MAGURA Material Audit
+
+on:
+  push:
+    paths:
+      - ".github/workflows/magura-material-audit.yml"
+      - "edm-jobs/magura_material_audit.py"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  audit:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      BLENDER_VERSION: "4.1.1"
+      BLENDER_URL: "https://download.blender.org/release/Blender4.1/blender-4.1.1-windows-x64.zip"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download V5 proven visual artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: magura-aim9x-360-hires-12
+          path: v5-artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: Thepropergrip/Working-USV
+          run-id: 33933261470
+
+      - name: Install Blender 4.1.1 portable
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $zip = Join-Path $env:RUNNER_TEMP "blender-$env:BLENDER_VERSION.zip"
+          $dir = Join-Path $env:RUNNER_TEMP "blender-$env:BLENDER_VERSION"
+          Invoke-WebRequest -Uri $env:BLENDER_URL -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $dir -Force
+          $exe = Get-ChildItem -Path $dir -Filter blender.exe -Recurse | Select-Object -First 1
+          if (-not $exe) { throw "Blender executable not found." }
+          "BLENDER_EXE=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Audit object material assignments
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $blend = "v5-artifact/MAGURA_W6_SeaDragon_AIM9X_360_HiRes.blend"
+          if (-not (Test-Path $blend)) { throw "V5 blend missing." }
+          & $env:BLENDER_EXE --background $blend --python "edm-jobs/magura_material_audit.py"
+          if ($LASTEXITCODE -ne 0) { throw "Material audit failed." }
+          if (-not (Test-Path "magura-material-audit.json")) { throw "Audit output missing." }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: magura-material-audit
+          path: magura-material-audit.json
+          if-no-files-found: error
+          retention-days: 7
