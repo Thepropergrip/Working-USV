@@ -6,7 +6,12 @@ on:
       - ".github/workflows/magura-hires-visual.yml"
       - "edm-jobs/magura_hires_texturegen.py"
       - "edm-jobs/magura_hires_visual_patch.py"
+      - "edm-jobs/magura_hires_texture_flatten_v3.py"
       - "edm-jobs/magura_hires_refinement_v2.py"
+      - "edm-jobs/magura_hires_refinement_v3.py"
+      - "edm-jobs/magura_hires_refinement_v4.py"
+      - "edm-jobs/magura_hires_refinement_v5.py"
+      - "edm-jobs/magura_hires_preview_v5.py"
       - "edm-jobs/magura_hires_visual_driver.py"
       - "edm-jobs/magura_hires_destroyed_visibility.py"
       - "edm-jobs/magura_hires_intact_job.json"
@@ -128,6 +133,18 @@ jobs:
           if (-not (Test-Path "$out/MAGURA_W6_SeaDragon_AIM9X_360_HiRes.edm")) { throw "HiRes intact EDM missing." }
           if (-not (Test-Path "$out/MAGURA_W6_SeaDragon_AIM9X_360_HiRes.blend")) { throw "HiRes patched blend missing." }
           if (-not (Test-Path "hires-generated/visual-qa.json")) { throw "Visual QA report missing." }
+          $qa = Get-Content "hires-generated/visual-qa.json" -Raw | ConvertFrom-Json
+          if ($qa.refinement_v5.status -ne "success") {
+            throw "V5 floating-part QA did not pass: $($qa.refinement_v5.status)"
+          }
+          if ($qa.refinement_v5.remaining_detached_candidates.Count -ne 0) {
+            throw "V5 still has detached candidates."
+          }
+          if ($qa.refinement_v5.functional_transform_max_delta -ne 0) {
+            throw "V5 changed a protected transform."
+          }
+          $previews = Get-ChildItem "hires-generated/preview-v5" -Filter *.png -ErrorAction SilentlyContinue
+          if ($previews.Count -lt 4) { throw "V5 QA preview renders missing." }
 
       - name: Export HiRes destroyed EDM from same patched blend
         shell: pwsh
@@ -145,6 +162,9 @@ jobs:
           $out = Join-Path $env:GITHUB_WORKSPACE "edm-artifacts"
           Copy-Item -Recurse -Force "hires-generated/textures" (Join-Path $out "Textures")
           Copy-Item -Force "hires-generated/visual-qa.json" (Join-Path $out "visual-qa.json")
+          if (Test-Path "hires-generated/preview-v5") {
+            Copy-Item -Recurse -Force "hires-generated/preview-v5" (Join-Path $out "PreviewV5")
+          }
           $hashes = @()
           Get-ChildItem -Path $out -File -Recurse | ForEach-Object {
             $hashes += [pscustomobject]@{
