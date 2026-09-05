@@ -143,8 +143,8 @@ jobs:
           if ($qa.refinement_v5.functional_transform_max_delta -ne 0) {
             throw "V5 changed a protected transform."
           }
-          $previews = Get-ChildItem "hires-generated/preview-v5" -Filter *.png -ErrorAction SilentlyContinue
-          if ($previews.Count -lt 4) { throw "V5 QA preview renders missing." }
+          $previews = Get-ChildItem "hires-generated/preview-v5" -Filter *.svg -ErrorAction SilentlyContinue
+          if ($previews.Count -lt 4) { throw "V5 headless-safe QA previews missing." }
 
       - name: Export HiRes destroyed EDM from same patched blend
         shell: pwsh
