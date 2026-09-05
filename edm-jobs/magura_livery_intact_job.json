@@ -1,0 +1,7 @@
+{
+  "mode": "blend",
+  "blend": "v5-artifact/MAGURA_W6_SeaDragon_AIM9X_360_HiRes.blend",
+  "post_script": "edm-jobs/magura_livery_material_split.py",
+  "output": "MAGURA_W6_SeaDragon_AIM9X_360_HR5L.edm",
+  "save_blend": true
+}
