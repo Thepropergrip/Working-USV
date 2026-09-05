@@ -11,6 +11,7 @@ FLATTEN = ROOT / "edm-jobs" / "magura_hires_texture_flatten_v3.py"
 REFINE_V3 = ROOT / "edm-jobs" / "magura_hires_refinement_v3.py"
 REFINE_V4 = ROOT / "edm-jobs" / "magura_hires_refinement_v4.py"
 REFINE_V5 = ROOT / "edm-jobs" / "magura_hires_refinement_v5.py"
+UNIQUE_V5 = ROOT / "edm-jobs" / "magura_hires_texture_unique_v5.py"
 PREVIEW_V5 = ROOT / "edm-jobs" / "magura_hires_preview_v5.py"
 REPORT = ROOT / "hires-generated" / "visual-qa.json"
 
@@ -25,6 +26,10 @@ runpy.run_path(str(FLATTEN), run_name="__main__")
 runpy.run_path(str(REFINE_V3), run_name="__main__")
 runpy.run_path(str(REFINE_V4), run_name="__main__")
 runpy.run_path(str(REFINE_V5), run_name="__main__")
+
+# Coexistence is a hard requirement: all modified HiRes texture references are
+# switched to V5-specific filenames before the EDM is written.
+runpy.run_path(str(UNIQUE_V5), run_name="__main__")
 
 
 def ensure_uv(obj):
@@ -80,9 +85,9 @@ report["converted_visual_curves"] = converted
 report["uv_policy"] = "UVMap guaranteed for every surviving HiRes/V3/V4/V5 visual mesh before EDM export"
 REPORT.write_text(json.dumps(report, indent=2), encoding="utf-8")
 
-# Render four geometry QA views before EDM export. These previews are included in
-# the workflow artifact so the floating-part result can be inspected directly
-# instead of relying on another blind DCS iteration.
+# Generate four headless-safe geometry QA projections before EDM export. These
+# are included in the artifact so detached placement can be inspected without
+# relying on another blind DCS iteration.
 runpy.run_path(str(PREVIEW_V5), run_name="__main__")
 
 print(f"MAGURA_HIRES_UV_READY={len(fixed)}")
