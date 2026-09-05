@@ -7,45 +7,58 @@ from materials.material_default import DefaultMaterial
 workspace = Path(os.environ.get('GITHUB_WORKSPACE', os.getcwd())).resolve()
 tex_dir = workspace / 'edm-jobs' / 'ground109_road_textures'
 
-# Exact dimensions requested: 30 ft length. Chosen road width: 18 ft traveled way,
-# plus 2.5 ft feathered shoulders each side to help hide terrain grass/clipping.
+# Corrected proportions: a true 30 ft LONG two-lane rural road section.
+# Two 9 ft lanes = 18 ft traveled way, plus only 1 ft feather each side.
 FT = 0.3048
 LENGTH = 30.0 * FT
 ROAD_W = 18.0 * FT
-SHOULDER = 2.5 * FT
+FEATHER = 1.0 * FT
+OVERALL_W = ROAD_W + 2.0 * FEATHER
 HALF_L = LENGTH / 2.0
 HALF_ROAD = ROAD_W / 2.0
-HALF_TOTAL = HALF_ROAD + SHOULDER
+HALF_TOTAL = OVERALL_W / 2.0
 
-# Raised/crowned road bed. This does not truly disable DCS procedural grass;
-# it physically lifts the road surface above most grass while feathering to terrain.
-EDGE_Z = 0.018
-ROAD_EDGE_Z = 0.135
-CROWN_Z = 0.185
-BASE_Z = -0.035
+# Drive-on longitudinal transitions. The first/last 5 ft taper smoothly to
+# terrain so a vehicle approaching head-on does not hit a vertical road end.
+RAMP_LEN = 5.0 * FT
+TERRAIN_Z = 0.010
+ROAD_EDGE_Z = 0.115
+CROWN_Z = 0.175
+COLL_BOTTOM_Z = -1.0
 TEX_SCALE_M = 2.0
 
+# Across-road profile: narrow feather -> lane edge -> crown -> lane edge -> feather.
 xs = [-HALF_TOTAL, -HALF_ROAD, 0.0, HALF_ROAD, HALF_TOTAL]
-zs = [EDGE_Z, ROAD_EDGE_Z, CROWN_Z, ROAD_EDGE_Z, EDGE_Z]
-ys = [-HALF_L, HALF_L]
+full_profile_z = [TERRAIN_Z, ROAD_EDGE_Z, CROWN_Z, ROAD_EDGE_Z, TERRAIN_Z]
 
+# Along-road stations. Extra midpoint stations make each 5 ft approach a smooth
+# two-stage incline rather than one hard planar ramp.
+ys = [
+    -HALF_L,
+    -HALF_L + RAMP_LEN * 0.5,
+    -HALF_L + RAMP_LEN,
+     HALF_L - RAMP_LEN,
+     HALF_L - RAMP_LEN * 0.5,
+     HALF_L,
+]
+blend = [0.0, 0.5, 1.0, 1.0, 0.5, 0.0]
+
+# VISUAL MESH: top surface only. There are deliberately NO vertical end faces,
+# so Ground109 can never be stretched down the front/back of the road section.
 verts = []
-for y in ys:
-    for x, z in zip(xs, zs):
+for y, t in zip(ys, blend):
+    for x, z_full in zip(xs, full_profile_z):
+        z = TERRAIN_Z + t * (z_full - TERRAIN_Z)
         verts.append((x, y, z))
+
+nx = len(xs)
+ny = len(ys)
 faces = []
-for i in range(len(xs)-1):
-    a=i; b=i+1; c=len(xs)+i+1; d=len(xs)+i
-    faces.append((a,b,c,d))
-base_start = len(verts)
-for y in ys:
-    verts.append((-HALF_TOTAL, y, BASE_Z))
-    verts.append(( HALF_TOTAL, y, BASE_Z))
-faces.append((0, len(xs), base_start+2, base_start+0))
-faces.append((len(xs)-1, 2*len(xs)-1, base_start+3, base_start+1))
-faces.append((base_start+0, base_start+1, 4,3,2,1,0))
-faces.append((base_start+2, 5,6,7,8,9, base_start+3))
-faces.append((base_start+0, base_start+2, base_start+3, base_start+1))
+for j in range(ny - 1):
+    row0 = j * nx
+    row1 = (j + 1) * nx
+    for i in range(nx - 1):
+        faces.append((row0+i, row0+i+1, row1+i+1, row1+i))
 
 mesh = bpy.data.meshes.new('TPG_Ground109_Road_30ft_Mesh')
 mesh.from_pydata(verts, [], faces)
@@ -53,11 +66,13 @@ mesh.update()
 road = bpy.data.objects.new('TPG_GROUND109_ROAD_30FT', mesh)
 bpy.context.collection.objects.link(road)
 
+# World-planar road UVs: texture continues naturally across both approach ramps.
+# Because no end-cap polygons exist, there is no opportunity for vertical texture stretch.
 uv_layer = mesh.uv_layers.new(name='UVMap')
 for poly in mesh.polygons:
     for li in poly.loop_indices:
         vi = mesh.loops[li].vertex_index
-        x,y,z = mesh.vertices[vi].co
+        x, y, z = mesh.vertices[vi].co
         uv_layer.data[li].uv = ((x / TEX_SCALE_M) + 0.5, (y / TEX_SCALE_M) + 0.5)
 
 mat = bpy.data.materials.new('TPG_Ground109_Road_PBR')
@@ -124,33 +139,42 @@ road.data.materials.append(mat)
 for p in mesh.polygons:
     p.use_smooth = False
 
-# Closed collision prism follows the exact crown + shoulders, but extends deeply
-# below terrain. Very thin wide DCS collision shells can be unreliable; this gives
-# the shell >1 m vertical depth without changing the visible road height.
-COLL_BOTTOM_Z = -1.0
-n = len(xs)
-cverts = []
-for y in ys:
-    for x, z in zip(xs, zs):
-        cverts.append((x, y, z))
+# COLLISION: closed prism with the same crown and longitudinal approach ramps.
+# The lower shell is buried 1 m below terrain; its end walls are therefore not visible,
+# while vehicles contact the same sloped top profile they see visually.
+cverts = list(verts)
 for y in ys:
     for x in xs:
         cverts.append((x, y, COLL_BOTTOM_Z))
 
+TOP_COUNT = nx * ny
 cfaces = []
-# Crown/shoulder top.
-for i in range(n - 1):
-    cfaces.append((i, i+1, n+i+1, n+i))
-# Flat underside.
-for i in range(n - 1):
-    cfaces.append((2*n+i, 3*n+i, 3*n+i+1, 2*n+i+1))
-# Long outer sides.
-cfaces.append((0, n, 3*n, 2*n))
-cfaces.append((n-1, 2*n-1, 4*n-1, 3*n-1))
-# End caps, split across crown strips.
-for i in range(n - 1):
-    cfaces.append((i, 2*n+i, 2*n+i+1, i+1))
-    cfaces.append((n+i, n+i+1, 3*n+i+1, 3*n+i))
+# Top surface.
+for j in range(ny - 1):
+    row0 = j * nx
+    row1 = (j + 1) * nx
+    for i in range(nx - 1):
+        cfaces.append((row0+i, row0+i+1, row1+i+1, row1+i))
+# Bottom surface.
+for j in range(ny - 1):
+    row0 = TOP_COUNT + j * nx
+    row1 = TOP_COUNT + (j + 1) * nx
+    for i in range(nx - 1):
+        cfaces.append((row0+i, row1+i, row1+i+1, row0+i+1))
+# Left/right long sides.
+for j in range(ny - 1):
+    t0 = j * nx
+    t1 = (j + 1) * nx
+    b0 = TOP_COUNT + j * nx
+    b1 = TOP_COUNT + (j + 1) * nx
+    cfaces.append((t0, t1, b1, b0))
+    cfaces.append((t0+nx-1, b0+nx-1, b1+nx-1, t1+nx-1))
+# Front/back buried end walls.
+for i in range(nx - 1):
+    cfaces.append((i, TOP_COUNT+i, TOP_COUNT+i+1, i+1))
+    top_last = (ny - 1) * nx
+    bot_last = TOP_COUNT + (ny - 1) * nx
+    cfaces.append((top_last+i, top_last+i+1, bot_last+i+1, bot_last+i))
 
 cmesh = bpy.data.meshes.new('TPG_Ground109_Road_30ft_CollisionMesh')
 cmesh.from_pydata(cverts, [], cfaces)
@@ -161,15 +185,26 @@ if not hasattr(col, 'EDMProps'):
     raise RuntimeError('EDM object properties were not registered')
 col.EDMProps.SPECIAL_TYPE = 'COLLISION_SHELL'
 
-road['TPG_ASSET'] = 'Ground109 Road 30ft'
+road['TPG_ASSET'] = 'Ground109 Road 30ft v1.1'
 road['LENGTH_M'] = LENGTH
 road['ROAD_WIDTH_M'] = ROAD_W
-road['OVERALL_WIDTH_M'] = HALF_TOTAL*2
+road['OVERALL_WIDTH_M'] = OVERALL_W
+road['RAMP_LENGTH_M'] = RAMP_LEN
 road['CROWN_HEIGHT_M'] = CROWN_Z
-road['GRASS_MITIGATION'] = 'raised crowned roadbed with feathered shoulders; DCS has no per-static grass exclusion mask'
+road['GRASS_MITIGATION'] = 'raised crowned center with narrow feather; drive-on ends return to terrain height'
 road['COLLISION_BOTTOM_Z_M'] = COLL_BOTTOM_Z
+road['NO_TEXTURED_END_CAPS'] = True
 
-print(f'[TPG ROAD] length={LENGTH:.4f}m (30ft), road_width={ROAD_W:.4f}m (18ft), overall_width={HALF_TOTAL*2:.4f}m')
-print(f'[TPG ROAD] road surface z={ROAD_EDGE_Z:.3f}-{CROWN_Z:.3f}m, edge z={EDGE_Z:.3f}m')
-print('[TPG ROAD] exact source Color + NormalGL + generated AO/Roughness/Metal RoughMet linked to ED material')
-print(f'[TPG ROAD] crowned collision prism follows visible road surface and extends to z={COLL_BOTTOM_Z:.3f}m')
+# Hard QA for the requested dimensions and approach behavior.
+assert abs(LENGTH / FT - 30.0) < 1e-9
+assert abs(ROAD_W / FT - 18.0) < 1e-9
+assert abs(OVERALL_W / FT - 20.0) < 1e-9
+assert abs(verts[2][2] - TERRAIN_Z) < 1e-9
+assert abs(verts[(ny-1)*nx + 2][2] - TERRAIN_Z) < 1e-9
+
+print(f'[TPG ROAD v1.1] exact footprint: 30.000 ft long x 18.000 ft traveled x 20.000 ft overall')
+print(f'[TPG ROAD v1.1] two 9 ft lanes; 1 ft feather each side')
+print(f'[TPG ROAD v1.1] 5 ft smooth drive-on ramp at BOTH longitudinal ends; end center z={TERRAIN_Z:.3f}m')
+print('[TPG ROAD v1.1] visual mesh is top-only: zero textured vertical end-cap polygons')
+print('[TPG ROAD v1.1] exact Ground109 Color + NormalGL + AO/Roughness-derived RoughMet retained')
+print(f'[TPG ROAD v1.1] collision follows crown + approach ramps and extends to z={COLL_BOTTOM_Z:.3f}m')
