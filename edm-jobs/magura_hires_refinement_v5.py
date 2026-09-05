@@ -7,9 +7,10 @@ import bpy
 from mathutils import Vector
 
 # MAGURA HiRes V5 corrective pass.
-# Purpose: remove genuinely detached/floating visual parts that survived V4.
-# This pass is geometry-placement QA only. It does not alter Lua, connectors,
-# weapon/sensor data, animation arguments, or protected pivot transforms.
+# Purpose: remove genuinely detached visual parts and snap small decorative
+# attachments flush to the surfaces they were visibly hovering above in DCS.
+# VISUAL ONLY: no Lua, connectors, weapon/sensor data, animation arguments or
+# protected pivot transforms are changed.
 
 ROOT = Path(os.environ.get("GITHUB_WORKSPACE", os.getcwd()))
 REPORT = ROOT / "hires-generated" / "visual-qa.json"
@@ -27,17 +28,11 @@ PROTECTED = (
 )
 SAMPLE_FRAMES = (50, 100, 150)
 
-# Conservative detached-part detector. The floating pieces visible in DCS are
-# small and separated from every real surface by a large air gap. We only remove
-# meshes whose largest dimension is <= 0.35 m and whose world AABB sits more than
-# 7 cm from every structural mesh. This intentionally leaves mounted lamps,
-# fasteners, brackets, lenses and rail fittings that actually touch geometry.
 MAX_SMALL_DIM = 0.35
 DETACHED_GAP = 0.07
 MIN_Z = 0.45
+STRICT_ATTACHMENT_GAP = 0.0015
 
-# These are visual/functional geometry families that must never be considered
-# removable even if their bounding boxes are unusual.
 NAME_PROTECT_TOKENS = (
     "POINT_", "CENTER_", "COLLISION", "Collision", "BOUND", "Bounding",
     "Hull", "HULL", "Deck", "DECK", "Fender", "Rubrail", "Rail", "RAIL",
@@ -81,6 +76,12 @@ def aabb_gap(a0, a1, b0, b1):
     return math.sqrt(dx * dx + dy * dy + dz * dz)
 
 
+def object_gap(a, b):
+    a0, a1, _, _ = aabb(a)
+    b0, b1, _, _ = aabb(b)
+    return aabb_gap(a0, a1, b0, b1)
+
+
 def in_lod0(obj):
     return any(c.name == LOD0 for c in obj.users_collection)
 
@@ -91,19 +92,114 @@ def name_protected(name):
     return any(tok in name for tok in NAME_PROTECT_TOKENS)
 
 
+def move_world(obj, delta):
+    """Translate a visual mesh in world space while retaining its parent/hierarchy."""
+    bpy.context.view_layer.update()
+    m = obj.matrix_world.copy()
+    m.translation = m.translation + Vector(delta)
+    obj.matrix_world = m
+    bpy.context.view_layer.update()
+
+
+def snap_known_hovering_details():
+    # The DCS screenshots exposed three specific construction errors which a
+    # coarse 7 cm detached-object detector cannot catch: black 'web-hole' discs
+    # 5 mm off the missile rail, pivot-bolt discs 2 mm off the rail, and cable
+    # glands / fairing fasteners hovering 8-12.5 mm above their panels. Embed
+    # each slightly into its intended support so no daylight can appear.
+    moved = []
+    checks = []
+
+    def shift_prefix(prefix, delta, support_name):
+        support = bpy.data.objects.get(support_name)
+        if support is None:
+            raise RuntimeError(f"V5 support missing: {support_name}")
+        for obj in sorted((o for o in bpy.data.objects if o.type == "MESH" and o.name.startswith(prefix)), key=lambda o: o.name):
+            before_gap = object_gap(obj, support)
+            move_world(obj, delta)
+            after_gap = object_gap(obj, support)
+            rec = {
+                "name": obj.name,
+                "support": support_name,
+                "delta_world": [float(v) for v in delta],
+                "gap_before": round(float(before_gap), 6),
+                "gap_after": round(float(after_gap), 6),
+            }
+            moved.append(rec)
+            checks.append(rec)
+
+    # Rail side decorative discs: move inward past the actual rail skin.
+    shift_prefix("APU73_WebHole_L_", (0.0, -0.0065, 0.0), "APU73_Rail_L")
+    shift_prefix("APU73_WebHole_R_", (0.0, +0.0065, 0.0), "APU73_Rail_R")
+    shift_prefix("Rail_PivotBolt_L_", (0.0, -0.0035, 0.0), "APU73_Rail_L")
+    shift_prefix("Rail_PivotBolt_R_", (0.0, +0.0035, 0.0), "APU73_Rail_R")
+
+    # Two forward cable glands visibly floated above the launcher fairing.
+    for name, support_name in (
+        ("Cable_Gland_0", "Launcher_Fairing_Port"),
+        ("Cable_Gland_1", "Launcher_Fairing_Starboard"),
+    ):
+        obj = bpy.data.objects.get(name)
+        support = bpy.data.objects.get(support_name)
+        if obj is None or support is None:
+            raise RuntimeError(f"V5 attachment/support missing: {name} / {support_name}")
+        before_gap = object_gap(obj, support)
+        move_world(obj, (0.0, 0.0, -0.0155))
+        after_gap = object_gap(obj, support)
+        rec = {
+            "name": name, "support": support_name,
+            "delta_world": [0.0, 0.0, -0.0155],
+            "gap_before": round(float(before_gap), 6),
+            "gap_after": round(float(after_gap), 6),
+        }
+        moved.append(rec); checks.append(rec)
+
+    # Fairing side fasteners 1-4 were modeled 8 mm outside the panel skin.
+    for side, sign, support_name in (
+        ("Port", -1.0, "Launcher_Fairing_Port"),
+        ("Starboard", +1.0, "Launcher_Fairing_Starboard"),
+    ):
+        support = bpy.data.objects.get(support_name)
+        if support is None:
+            raise RuntimeError(f"V5 support missing: {support_name}")
+        for i in range(1, 5):
+            name = f"Fairing_Fastener_{side}_{i}"
+            obj = bpy.data.objects.get(name)
+            if obj is None:
+                continue
+            before_gap = object_gap(obj, support)
+            delta = (0.0, sign * 0.0100, 0.0)
+            move_world(obj, delta)
+            after_gap = object_gap(obj, support)
+            rec = {
+                "name": name, "support": support_name,
+                "delta_world": [float(v) for v in delta],
+                "gap_before": round(float(before_gap), 6),
+                "gap_after": round(float(after_gap), 6),
+            }
+            moved.append(rec); checks.append(rec)
+
+    bad = [r for r in checks if r["gap_after"] > STRICT_ATTACHMENT_GAP]
+    if bad:
+        raise RuntimeError(f"V5 flush-attachment QA failed: {bad}")
+    return moved, bad
+
+
 before = snapshot()
 bpy.context.scene.frame_set(100)
 bpy.context.view_layer.update()
 
+# First fix the near-surface objects that looked detached despite being less than
+# 7 cm from their intended supports.
+snapped_attachments, bad_attachment_gaps = snap_known_hovering_details()
+
+# Then remove truly detached small visual meshes.
 meshes = [o for o in bpy.data.objects if o.type == "MESH" and in_lod0(o)]
 boxes = {o.name: aabb(o) for o in meshes}
-
-# Structural support set: larger meshes and all explicitly protected families.
 structural = []
 for obj in meshes:
     mn, mx, dims, center = boxes[obj.name]
-    maxdim = max(dims)
-    if maxdim > MAX_SMALL_DIM or name_protected(obj.name):
+    if max(dims) > MAX_SMALL_DIM or name_protected(obj.name):
         structural.append(obj)
 
 candidates = []
@@ -111,9 +207,7 @@ for obj in meshes:
     if name_protected(obj.name):
         continue
     mn, mx, dims, center = boxes[obj.name]
-    if max(dims) > MAX_SMALL_DIM:
-        continue
-    if mn.z < MIN_Z:
+    if max(dims) > MAX_SMALL_DIM or mn.z < MIN_Z:
         continue
     nearest_name = None
     nearest_gap = float("inf")
@@ -146,8 +240,6 @@ for item in candidates:
 
 bpy.context.view_layer.update()
 
-# Re-run the same test after removal. A successful V5 must leave no clearly
-# detached small visual object under this conservative detector.
 remaining_detached = []
 meshes2 = [o for o in bpy.data.objects if o.type == "MESH" and in_lod0(o)]
 boxes2 = {o.name: aabb(o) for o in meshes2}
@@ -194,15 +286,18 @@ report = {}
 if REPORT.exists():
     report = json.loads(REPORT.read_text(encoding="utf-8"))
 report["refinement_v5"] = {
-    "status": "success" if not remaining_detached else "needs_review",
-    "purpose": "remove clearly detached/floating small visual meshes using world-space support-gap QA",
+    "status": "success" if not remaining_detached and not bad_attachment_gaps else "needs_review",
+    "purpose": "remove detached small meshes and force near-surface rail/fairing details flush to supports",
     "max_small_dim_m": MAX_SMALL_DIM,
     "detached_gap_m": DETACHED_GAP,
+    "strict_attachment_gap_m": STRICT_ATTACHMENT_GAP,
+    "snapped_visual_attachments": snapped_attachments,
+    "bad_attachment_gaps": bad_attachment_gaps,
     "candidate_count": len(candidates),
     "removed_detached_objects": removed,
     "remaining_detached_candidates": remaining_detached,
     "functional_transform_max_delta": max_delta,
-    "policy": "visual-only mesh removal; protected turret/sensor/connectors unchanged",
+    "policy": "visual-only mesh placement/removal; protected turret/sensor/connectors unchanged",
 }
 REPORT.parent.mkdir(parents=True, exist_ok=True)
 REPORT.write_text(json.dumps(report, indent=2), encoding="utf-8")
