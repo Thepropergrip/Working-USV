@@ -1,4 +1,4 @@
-name: TPG Substation LIGHTS Projector Build
+name: TPG Substation LIGHTS Massun Donor Build
 
 on:
   push:
@@ -8,6 +8,7 @@ on:
       - ".github/workflows/tpg-substation-lights-export.yml"
       - "edm-jobs/build_tpg_substation_lights_*.py"
       - "edm-jobs/add_tpg_substation_projector_connectors.py"
+      - "edm-jobs/inject_tpg_substation_massun_lightnodes.py"
       - "edm-jobs/tpg_substation_lights_*.json"
       - "edm-jobs/package_tpg_substation_lights.ps1"
       - "edm-jobs/build_tpg_substation.py"
@@ -90,12 +91,33 @@ jobs:
           if (-not $edm) { throw "No EDM produced for ${{ matrix.variant }}." }
           $edm | ForEach-Object { Write-Host "$($_.Name) $($_.Length) bytes" }
 
-      - name: Verify connector/light-node export policy
+      - name: Inject donor-verified legacy LightNode v1 floods
         if: matrix.variant != 'destroyed'
         shell: pwsh
         run: |
-          Write-Host "Expected build policy: 9 TPG_YARD_FLOOD_* connectors, emissive lenses, zero Blender LIGHT objects."
-          Write-Host "Builder hard-asserts zero Blender LIGHT objects and will have failed before this step otherwise."
+          $ErrorActionPreference = "Stop"
+          $out = Join-Path $env:GITHUB_WORKSPACE "edm-artifacts"
+          $edm = Get-ChildItem $out -Filter *.edm -File | Select-Object -First 1
+          if (-not $edm) { throw "No EDM found for donor light injection." }
+          python "edm-jobs/inject_tpg_substation_massun_lightnodes.py" "$($edm.FullName)"
+          if ($LASTEXITCODE -ne 0) { throw "Massun donor LightNode injection failed for ${{ matrix.variant }}." }
+          $bytes = [System.IO.File]::ReadAllBytes($edm.FullName)
+          $ascii = [System.Text.Encoding]::ASCII.GetString($bytes)
+          $hits = ([regex]::Matches($ascii, "TPG_MASSUN_FLOOD_")).Count
+          if ($hits -ne 9) { throw "Expected 9 injected donor flood names, found $hits" }
+          if ($ascii -notmatch "model::LightNode" -or $ascii -notmatch "LIGHT_NODES") { throw "Legacy LightNode footer missing after injection" }
+          Write-Host "Verified donor LightNode injection: 9 floods in $($edm.Name), $($edm.Length) bytes"
+
+      - name: Verify destroyed model remains dark
+        if: matrix.variant == 'destroyed'
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:GITHUB_WORKSPACE "edm-artifacts"
+          $edm = Get-ChildItem $out -Filter *.edm -File | Select-Object -First 1
+          $bytes = [System.IO.File]::ReadAllBytes($edm.FullName)
+          $ascii = [System.Text.Encoding]::ASCII.GetString($bytes)
+          if ($ascii -match "TPG_MASSUN_FLOOD_") { throw "Destroyed model unexpectedly contains donor lights" }
+          Write-Host "Destroyed model verified dark/no donor light nodes."
 
       - name: Upload ${{ matrix.variant }}
         uses: actions/upload-artifact@v4
@@ -133,7 +155,7 @@ jobs:
       - name: Upload final DCS LIGHTS package
         uses: actions/upload-artifact@v4
         with:
-          name: TPG-Electrical-Substation-V1-LIGHTS-PROJECTOR-DCS-DropIn
+          name: TPG-Electrical-Substation-V1-LIGHTS-MASSUN-DONOR-DCS-DropIn
           path: |
             edm-artifacts/TPG_Electrical_Substation_V1_LIGHTS_DCS_DropIn.zip
             edm-artifacts/TPG_Electrical_Substation_V1_LIGHTS/**
