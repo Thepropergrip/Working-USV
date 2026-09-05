@@ -169,10 +169,12 @@ def render_views():
         render_one(cam, name, loc, target, scale)
 
     # Neutral clay geometry renders separate silhouette/curvature from EDM materials.
-    # This is the authoritative body-fidelity diagnostic.
+    # These four views are the authoritative body-fidelity gate: side, front,
+    # front three-quarter and rear three-quarter.  Keep rear_3q in the set so
+    # topper, tailgate and custom rear-bumper geometry cannot pass unseen.
     ground.hide_render = True
     scene.view_layers[0].material_override = clay
-    for name in ('side_driver', 'front', 'front_3q'):
+    for name in ('side_driver', 'front', 'front_3q', 'rear_3q'):
         loc, target, scale = views[name]
         render_one(cam, name + '_clay', loc, target, scale)
     scene.view_layers[0].material_override = None
