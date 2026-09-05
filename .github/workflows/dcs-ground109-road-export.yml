@@ -51,7 +51,7 @@ jobs:
             $path = Join-Path $out $name
             if (-not (Test-Path $path)) { throw "Missing exact texture map: $name" }
             $hash = (Get-FileHash -Algorithm SHA256 $path).Hash.ToLowerInvariant()
-            if ($hash -ne $checks[$name]) { throw "Texture mismatch for $name: $hash" }
+            if ($hash -ne $checks[$name]) { throw "Texture mismatch for ${name}: $hash" }
             Write-Host "Verified exact source map: $name"
           }
 
