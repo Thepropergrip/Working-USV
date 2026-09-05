@@ -11,6 +11,7 @@ on:
       - "edm-jobs/magura_hires_refinement_v3.py"
       - "edm-jobs/magura_hires_refinement_v4.py"
       - "edm-jobs/magura_hires_refinement_v5.py"
+      - "edm-jobs/magura_hires_texture_unique_v5.py"
       - "edm-jobs/magura_hires_preview_v5.py"
       - "edm-jobs/magura_hires_visual_driver.py"
       - "edm-jobs/magura_hires_destroyed_visibility.py"
@@ -143,6 +144,14 @@ jobs:
           if ($qa.refinement_v5.functional_transform_max_delta -ne 0) {
             throw "V5 changed a protected transform."
           }
+          if ($qa.coexistence_v5_textures.status -ne "success") {
+            throw "V5 texture coexistence QA did not pass: $($qa.coexistence_v5_textures.status)"
+          }
+          if ($qa.coexistence_v5_textures.old_modified_texture_refs_remaining.Count -ne 0) {
+            throw "V5 still references non-unique modified HiRes texture basenames."
+          }
+          $v5textures = Get-ChildItem "hires-generated/textures" -Filter "*_V5.png" -ErrorAction SilentlyContinue
+          if ($v5textures.Count -lt 13) { throw "V5 unique texture set incomplete: $($v5textures.Count) files." }
           $previews = Get-ChildItem "hires-generated/preview-v5" -Filter *.svg -ErrorAction SilentlyContinue
           if ($previews.Count -lt 4) { throw "V5 headless-safe QA previews missing." }
 
