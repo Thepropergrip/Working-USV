@@ -1,4 +1,4 @@
-name: TPG Substation LIGHTS Parallel EDM Build
+name: TPG Substation LIGHTS Projector Build
 
 on:
   push:
@@ -7,6 +7,7 @@ on:
     paths:
       - ".github/workflows/tpg-substation-lights-export.yml"
       - "edm-jobs/build_tpg_substation_lights_*.py"
+      - "edm-jobs/add_tpg_substation_projector_connectors.py"
       - "edm-jobs/tpg_substation_lights_*.json"
       - "edm-jobs/package_tpg_substation_lights.ps1"
       - "edm-jobs/build_tpg_substation.py"
@@ -36,7 +37,7 @@ jobs:
     env:
       BLENDER_VERSION: "4.1.1"
       BLENDER_URL: "https://download.blender.org/release/Blender4.1/blender-4.1.1-windows-x64.zip"
-      ED_EXPORTER_COMMIT: "5f03ba70ec96ca6ce68028eabc786ecd97f9cf93"
+      ED_EXPORTER_COMMIT: "e03f94ed15c577822e0842923b054c456626770a"
 
     steps:
       - name: Checkout
@@ -75,6 +76,7 @@ jobs:
           if (-not (Test-Path (Join-Path $lower "__init__.py"))) { throw "ED material package normalization failed." }
           if (-not (Test-Path (Join-Path $addons "io_scene_edm\pyedm_311.pyd"))) { throw "Official pyedm_311.pyd missing." }
           "BLENDER_USER_SCRIPTS=$scripts" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Using ED exporter commit $env:ED_EXPORTER_COMMIT"
 
       - name: Export ${{ matrix.variant }}
         shell: pwsh
@@ -87,6 +89,13 @@ jobs:
           $edm = Get-ChildItem $out -Filter *.edm -File
           if (-not $edm) { throw "No EDM produced for ${{ matrix.variant }}." }
           $edm | ForEach-Object { Write-Host "$($_.Name) $($_.Length) bytes" }
+
+      - name: Verify connector/light-node export policy
+        if: matrix.variant != 'destroyed'
+        shell: pwsh
+        run: |
+          Write-Host "Expected build policy: 9 TPG_YARD_FLOOD_* connectors, emissive lenses, zero Blender LIGHT objects."
+          Write-Host "Builder hard-asserts zero Blender LIGHT objects and will have failed before this step otherwise."
 
       - name: Upload ${{ matrix.variant }}
         uses: actions/upload-artifact@v4
@@ -124,7 +133,7 @@ jobs:
       - name: Upload final DCS LIGHTS package
         uses: actions/upload-artifact@v4
         with:
-          name: TPG-Electrical-Substation-V1-LIGHTS-DCS-DropIn
+          name: TPG-Electrical-Substation-V1-LIGHTS-PROJECTOR-DCS-DropIn
           path: |
             edm-artifacts/TPG_Electrical_Substation_V1_LIGHTS_DCS_DropIn.zip
             edm-artifacts/TPG_Electrical_Substation_V1_LIGHTS/**
