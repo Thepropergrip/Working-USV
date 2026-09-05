@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   export:
-    runs-on: windows-latest
+    runs-on: windows-2022
     timeout-minutes: 20
     env:
       BLENDER_VERSION: "4.1.1"
