@@ -1,26 +1,26 @@
-name: TPG Ground109 Road EDM Export
+name: TPG Ground109 Dirt Road Set Export
 
 on:
   push:
     paths:
       - ".github/workflows/dcs-ground109-road-export.yml"
       - "edm-jobs/build_tpg_ground109_road.py"
-      - "edm-jobs/ground109_road_job.json"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  export-road:
+  export-road-set:
     runs-on: windows-2022
-    timeout-minutes: 30
+    timeout-minutes: 40
     env:
       BLENDER_VERSION: "4.1.1"
       BLENDER_URL: "https://download.blender.org/release/Blender4.1/blender-4.1.1-windows-x64.zip"
       ED_EXPORTER_COMMIT: "5f03ba70ec96ca6ce68028eabc786ecd97f9cf93"
     steps:
       - uses: actions/checkout@v4
+
       - name: Install Blender 4.1.1 portable
         shell: pwsh
         run: |
@@ -32,7 +32,8 @@ jobs:
           $exe = Get-ChildItem -Path $dir -Filter blender.exe -Recurse | Select-Object -First 1
           if (-not $exe) { throw "Blender executable not found" }
           "BLENDER_EXE=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-      - name: Download and verify exact Ground109 2K PNG source pack
+
+      - name: Download and verify exact Ground109 source maps
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -66,25 +67,64 @@ jobs:
           $addons = Join-Path $scripts "addons"
           New-Item -ItemType Directory -Force -Path $addons | Out-Null
           Copy-Item -Recurse -Force (Join-Path $src "io_scene_edm") (Join-Path $addons "io_scene_edm")
-          $materialsUpper = Join-Path $addons "io_scene_edm\Materials"
-          $materialsTemp  = Join-Path $addons "io_scene_edm\__materials_casefix"
-          if (Test-Path $materialsUpper) {
-            Rename-Item -Path $materialsUpper -NewName "__materials_casefix"
-            Rename-Item -Path $materialsTemp -NewName "materials"
+          $upper = Join-Path $addons "io_scene_edm\Materials"
+          $tmp = Join-Path $addons "io_scene_edm\__materials_casefix"
+          if (Test-Path $upper) {
+            Rename-Item -Path $upper -NewName "__materials_casefix"
+            Rename-Item -Path $tmp -NewName "materials"
           }
           "BLENDER_USER_SCRIPTS=$scripts" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "EDM_EXPORTER_COMMIT=$env:ED_EXPORTER_COMMIT" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-      - name: Export road EDM
+
+      - name: Export all 9 dirt road pieces
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $out = Join-Path $env:GITHUB_WORKSPACE "edm-artifacts"
-          New-Item -ItemType Directory -Force -Path $out | Out-Null
-          & $env:BLENDER_EXE --background --python "tools/dcs-edm/export_job.py" -- --job "edm-jobs/ground109_road_job.json" --artifact-dir "$out"
-          if ($LASTEXITCODE -ne 0) { throw "Road EDM export failed" }
+          $root = Join-Path $env:GITHUB_WORKSPACE "edm-artifacts"
+          $final = Join-Path $root "road-set"
+          New-Item -ItemType Directory -Force -Path $final | Out-Null
+
+          $variants = @(
+            @{ kind="straight"; len="15";  tag="15FT";         output="TPG_DIRT_SINGLE_LANE_15FT.edm" },
+            @{ kind="straight"; len="30";  tag="30FT";         output="TPG_DIRT_SINGLE_LANE_30FT.edm" },
+            @{ kind="straight"; len="50";  tag="50FT";         output="TPG_DIRT_SINGLE_LANE_50FT.edm" },
+            @{ kind="straight"; len="100"; tag="100FT";        output="TPG_DIRT_SINGLE_LANE_100FT.edm" },
+            @{ kind="straight"; len="500"; tag="500FT";        output="TPG_DIRT_SINGLE_LANE_500FT.edm" },
+            @{ kind="t"; len="30"; tag="T_JUNCTION";          output="TPG_DIRT_SINGLE_LANE_T_JUNCTION.edm" },
+            @{ kind="right"; len="30"; tag="RIGHT_TURN";      output="TPG_DIRT_SINGLE_LANE_RIGHT_TURN.edm" },
+            @{ kind="left"; len="30"; tag="LEFT_TURN";        output="TPG_DIRT_SINGLE_LANE_LEFT_TURN.edm" },
+            @{ kind="intersection"; len="30"; tag="INTERSECTION"; output="TPG_DIRT_SINGLE_LANE_INTERSECTION.edm" }
+          )
+
+          foreach ($v in $variants) {
+            $env:ROAD_KIND = $v.kind
+            $env:ROAD_LENGTH_FT = $v.len
+            $env:ROAD_TAG = $v.tag
+            $job = Join-Path $env:RUNNER_TEMP ("road-job-" + $v.tag + ".json")
+            $work = Join-Path $root $v.tag
+            New-Item -ItemType Directory -Force -Path $work | Out-Null
+            $jobObj = @{
+              mode = "script"
+              script = "edm-jobs/build_tpg_ground109_road.py"
+              output = $v.output
+              save_blend = $false
+            }
+            $jobObj | ConvertTo-Json | Set-Content -Path $job -Encoding UTF8
+            Write-Host "EXPORT $($v.tag) kind=$($v.kind) length=$($v.len) -> $($v.output)"
+            & $env:BLENDER_EXE --background --python "tools/dcs-edm/export_job.py" -- --job "$job" --artifact-dir "$work"
+            if ($LASTEXITCODE -ne 0) { throw "EDM export failed for $($v.tag)" }
+            $edm = Join-Path $work $v.output
+            if (-not (Test-Path $edm)) { throw "Missing exported EDM: $edm" }
+            Copy-Item -Force $edm (Join-Path $final $v.output)
+          }
+
+          $count = (Get-ChildItem -Path $final -Filter *.edm).Count
+          if ($count -ne 9) { throw "Expected 9 EDM files, got $count" }
+          Get-ChildItem $final | Format-Table Name,Length
+
       - uses: actions/upload-artifact@v4
         with:
-          name: tpg-ground109-road-30ft
-          path: edm-artifacts/**
+          name: tpg-ground109-dirt-single-lane-road-set
+          path: edm-artifacts/road-set/*.edm
           if-no-files-found: error
           retention-days: 30
