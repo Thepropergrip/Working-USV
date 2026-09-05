@@ -156,8 +156,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: TPG-Electrical-Substation-V1-LIGHTS-MASSUN-DONOR-DCS-DropIn
-          path: |
-            edm-artifacts/TPG_Electrical_Substation_V1_LIGHTS_DCS_DropIn.zip
-            edm-artifacts/TPG_Electrical_Substation_V1_LIGHTS/**
+          path: edm-artifacts/TPG_Electrical_Substation_V1_LIGHTS/**
           if-no-files-found: error
           retention-days: 30
