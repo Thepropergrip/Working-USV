@@ -2,9 +2,10 @@ import bpy, os
 from collections import defaultdict
 
 # Tacoma FBX-v3 canonical final visual pass.
-# Round 3 is a bounded closeout sculpt based on the dedicated Round-2 clay QA and
-# the 2016 Tacoma TRD Off Road DCLB concept/reference sheet. Gameplay registration,
-# tuning, wheel animation arguments, LOD/destroyed plumbing and exporter are untouched.
+# Round 4 keeps the useful Round-3 cab/hood/topper sculpt but removes the proud
+# fascia/hood appliques exposed by clay QA. Only thin flush 2016-style grille/lens
+# inserts remain. Gameplay registration, tuning, wheel animation arguments,
+# LOD/destroyed plumbing and the official exporter are untouched.
 
 WHEEL_TARGETS = {
     "FBX_Cylinder_STEER":      ( 1.74, -0.805),
@@ -25,56 +26,51 @@ if body is None or body.type != 'MESH':
 
 stats = defaultdict(int)
 
-# First pass: force the upper greenhouse into the broad, flatter third-gen Tacoma
-# envelope while leaving doors, beltline, wheel arches and bed untouched.
+# Bounded hero-body sculpt from measured QA bounds.
 for v in body.data.vertices:
     x, y, z = v.co.x, v.co.y, v.co.z
     ay = abs(y)
 
-    # Square roof shoulders more decisively than Round 2. Only the upper cab is touched.
+    # Square roof shoulders while leaving doors, beltline and wheel arches source-derived.
     if -1.16 <= x <= 0.58 and 1.50 <= z <= 1.82 and 0.42 <= ay <= 0.70:
         tz = min(1.0, max(0.0, (z - 1.50) / 0.27))
         tx_rear = min(1.0, max(0.0, (x + 1.16) / 0.18))
         tx_front = min(1.0, max(0.0, (0.58 - x) / 0.18))
         fade = min(tx_rear, tx_front)
-        desired_ay = ay + 0.065 * tz * fade
-        desired_ay = min(0.725, desired_ay)
+        desired_ay = min(0.725, ay + 0.065 * tz * fade)
         v.co.y = desired_ay if y >= 0 else -desired_ay
         stats["cab_shoulder_square"] += 1
 
-    # Flatten the roof crown to a shallow plane. Preserve a few millimeters of crown,
-    # but remove the continuous dome seen in Round-2 side/front-3Q clay.
+    # Flatten the central roof crown to the broad third-gen Tacoma envelope.
     if -1.10 <= x <= 0.42 and z >= 1.765 and ay <= 0.62:
         edge = min(1.0, ay / 0.62)
         target_z = 1.807 - 0.010 * edge
         v.co.z += (target_z - v.co.z) * 0.78
         stats["roof_plane"] += 1
 
-    # Straighten the upper windshield/header into a single Tacoma-like rake instead of
-    # the source mesh's rounded transition. Blend to a measured side-profile line.
+    # Straighten the windshield/header transition into a single defined rake.
     if 0.38 <= x <= 1.00 and 1.39 <= z <= 1.79:
         desired_x = 0.455 + (1.800 - z) * 1.18
         v.co.x += (desired_x - x) * 0.58
         stats["windshield_rake"] += 1
 
-    # Broad, smooth, scoopless Off-Road hood. Reduce center/shoulder waviness and keep
-    # the hood below the greenhouse; no Sport scoop or power bulge.
+    # Broad smooth scoopless TRD Off-Road hood.
     if 1.04 <= x <= 2.50 and 1.02 <= z <= 1.36:
         tx = min(1.0, max(0.0, (x - 1.04) / 1.46))
         desired = 1.315 - 0.028 * tx
-        # Preserve fender shoulders more than the central hood skin.
         blend = 0.58 if ay <= 0.68 else 0.24
         v.co.z += (desired - v.co.z) * blend
         stats["hood_plane"] += 1
 
-    # Slightly stand the upper nose up; lower bumper geometry stays source-derived.
+    # Stand only the upper nose slightly more upright; preserve lower bumper geometry.
     if x >= 2.28 and 0.80 <= z <= 1.29:
         tx = min(1.0, max(0.0, (x - 2.28) / 0.44))
         tz = min(1.0, max(0.0, (z - 0.80) / 0.49))
         v.co.x += (0.010 + 0.014 * tz) * tx
         stats["nose"] += 1
 
-# Second hood pass: equalize center vertices to local shoulder median at the same x.
+# Equalize the hood center to local shoulder height at each x station so no scoop,
+# recess or power bulge survives the original source topology.
 stations = defaultdict(lambda: {"center": [], "shoulder": []})
 for v in body.data.vertices:
     x, y, z = v.co.x, v.co.y, v.co.z
@@ -132,7 +128,6 @@ def make_mesh(name, verts, faces, material, smooth=False, bevel=0.0):
     return obj
 
 def prism_yz(name, poly, x_back, x_front, material, bevel=0.0):
-    # poly is [(y,z), ...] in front-view winding.
     n = len(poly)
     verts = [(x_back, y, z) for y,z in poly] + [(x_front, y, z) for y,z in poly]
     faces = [tuple(range(n-1, -1, -1)), tuple(n+i for i in range(n))]
@@ -141,20 +136,20 @@ def prism_yz(name, poly, x_back, x_front, material, bevel=0.0):
         faces.append((i, j, n+j, n+i))
     return make_mesh(name, verts, faces, material, smooth=False, bevel=bevel)
 
-# Replace every prior procedural camper shell with a lower, straighter ARE-style cap.
+# Remove every older generated shell/fascia object before creating the final set.
 for obj in list(bpy.data.objects):
-    if obj.name.startswith(("CAMPER_BODY","CAMPER_ROOF","CAMPER_SIDE_GLASS_",
-                            "CAMPER_REAR_GLASS","CAMPER_HERO_SHELL_",
-                            "TPG_FINAL_")):
+    if obj.name.startswith(("CAMPER_BODY", "CAMPER_ROOF", "CAMPER_SIDE_GLASS_",
+                            "CAMPER_REAR_GLASS", "CAMPER_HERO_SHELL_", "TPG_FINAL_")):
         bpy.data.objects.remove(obj, do_unlink=True)
 
+# Lower, straighter ARE-style long-bed topper: near cab-height roof, nearly vertical
+# side walls and shallow shoulders matching the reference truck.
 stations_shell = [
     (-1.08, 0.985,  0.000),
     (-1.48, 1.000,  0.002),
     (-2.18, 1.000,  0.000),
     (-2.68, 0.975, -0.010),
 ]
-# Flatter roof, more vertical sides, tighter shoulders; roof essentially flush with cab.
 profile = [
     (-0.862,1.000),(-0.862,1.440),(-0.850,1.650),(-0.815,1.748),
     (-0.755,1.790),(-0.625,1.807),(0.625,1.807),(0.755,1.790),
@@ -191,48 +186,28 @@ rear=[
 ]
 make_mesh("CAMPER_REAR_GLASS_HERO",rear,[tuple(range(len(rear)))],glass,smooth=False)
 
-# Thin scoopless hood skin. This covers source waviness/slotting without changing
-# collision or wheel openings and gives the front-3Q silhouette a clean factory hood.
-hood_top = [
-    (1.15,-0.825,1.318),(1.15,0.825,1.318),
-    (2.53,0.770,1.286),(2.53,-0.770,1.286),
-]
-hood_bot = [(x,y,z-0.010) for x,y,z in hood_top]
-verts = hood_bot + hood_top
-faces=[(0,1,2,3),(4,7,6,5),(0,4,5,1),(1,5,6,2),(2,6,7,3),(3,7,4,0)]
-make_mesh("TPG_FINAL_HOOD_SKIN",verts,faces,paint,smooth=False,bevel=0.006)
-
-# 2016 Tacoma face: paint trapezoid surround, black hex/trapezoid grille and compact
-# swept headlamp blocks. These are visual appliques placed just ahead of the source face.
-outer=[(-0.705,1.255),(0.705,1.255),(0.610,0.915),(-0.610,0.915)]
-prism_yz("TPG_FINAL_GRILLE_FRAME",outer,2.704,2.726,paint,bevel=0.018)
-inner=[(-0.630,1.205),(0.630,1.205),(0.535,0.965),(-0.535,0.965)]
-prism_yz("TPG_FINAL_GRILLE",inner,2.727,2.742,black,bevel=0.012)
-
-# Three subtle horizontal grille bars.
+# Round-4 fascia integration: no hood skin, no paint surround and no thick backing
+# blocks. Only millimeter-thin inserts sit essentially flush with the source nose.
+grille=[(-0.625,1.205),(0.625,1.205),(0.535,0.965),(-0.535,0.965)]
+prism_yz("TPG_FINAL_GRILLE", grille, 2.706, 2.714, black, bevel=0.006)
 for i,z in enumerate((1.155,1.085,1.015)):
-    poly=[(-0.575,z+0.012),(0.575,z+0.012),(0.555,z-0.012),(-0.555,z-0.012)]
-    prism_yz(f"TPG_FINAL_GRILLE_BAR_{i}",poly,2.742,2.748,black,bevel=0.003)
+    bar=[(-0.565,z+0.008),(0.565,z+0.008),(0.545,z-0.008),(-0.545,z-0.008)]
+    prism_yz(f"TPG_FINAL_GRILLE_BAR_{i}", bar, 2.714, 2.717, black, bevel=0.0015)
 
 for side in (-1,1):
-    # Headlight backing and inset lens, swept upward toward fender.
     if side>0:
-        back=[(0.625,1.235),(0.915,1.205),(0.900,1.080),(0.655,1.095)]
-        lens=[(0.655,1.210),(0.880,1.185),(0.865,1.105),(0.675,1.115)]
-        amb=[(0.865,1.175),(0.905,1.168),(0.895,1.105),(0.855,1.110)]
+        lens=[(0.650,1.215),(0.900,1.185),(0.885,1.095),(0.675,1.110)]
+        amb=[(0.870,1.177),(0.905,1.168),(0.895,1.108),(0.862,1.112)]
     else:
-        back=[(-0.915,1.205),(-0.625,1.235),(-0.655,1.095),(-0.900,1.080)]
-        lens=[(-0.880,1.185),(-0.655,1.210),(-0.675,1.115),(-0.865,1.105)]
-        amb=[(-0.905,1.168),(-0.865,1.175),(-0.855,1.110),(-0.895,1.105)]
-    prism_yz(f"TPG_FINAL_HEADLIGHT_BACK_{side}",back,2.704,2.730,black,bevel=0.006)
-    prism_yz(f"TPG_FINAL_HEADLIGHT_{side}",lens,2.731,2.744,lamp,bevel=0.004)
-    prism_yz(f"TPG_FINAL_HEADLIGHT_AMBER_{side}",amb,2.744,2.750,amber,bevel=0.002)
+        lens=[(-0.900,1.185),(-0.650,1.215),(-0.675,1.110),(-0.885,1.095)]
+        amb=[(-0.905,1.168),(-0.870,1.177),(-0.862,1.112),(-0.895,1.108)]
+    prism_yz(f"TPG_FINAL_HEADLIGHT_{side}", lens, 2.708, 2.716, lamp, bevel=0.002)
+    prism_yz(f"TPG_FINAL_HEADLIGHT_AMBER_{side}", amb, 2.716, 2.719, amber, bevel=0.001)
 
-# Ditch lights in the source build were visually oversized in clay. Scale only their
-# meshes, keeping mounts and positions intact.
+# Ditch-light housings were oversized relative to the user's reference photos.
 for obj in bpy.data.objects:
     if obj.name.startswith("BLACK_OAK_"):
         obj.scale *= 0.72
 
-print("[TPG TACOMA ROUND3 FINAL] squared cab, straightened windshield, scoopless hood skin, "
-      "2016 front face and lower ARE-style topper applied", dict(stats))
+print("[TPG TACOMA ROUND4 FINAL] retained Round-3 body/topper gains; removed proud hood/fascia "
+      "appliques and integrated flush 2016 grille/headlamp inserts", dict(stats))
