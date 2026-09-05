@@ -2,14 +2,13 @@ import argparse
 import struct
 from pathlib import Path
 
-# Injects donor-verified legacy EDM v10 model::LightNode v1 spotlights into an
-# otherwise modern official-exporter EDM. This bypasses the current pyedm light
-# serializer that DCS 2.9.29 rejects as "Wrong light version" while preserving
-# the high-fidelity official-exporter render geometry/materials.
+# Injects proven legacy EDM v10 model::LightNode v1 spotlights into an otherwise
+# modern official-exporter EDM. DCS 2.9.29 accepts this LightNode family and the
+# user's in-game test confirmed it produces real visible light and ground spread.
 #
 # Donor basis: user-provided, known-working Massun92
 # M92_Container_watchtower_lights_lods0/1/2.edm.
-# Decoded working main flood values:
+# Donor main flood values:
 #   isSpot = 1
 #   Color = (1.0, 0.9, 0.9)
 #   Brightness = 0.07
@@ -17,12 +16,19 @@ from pathlib import Path
 #   Theta = 0.5
 #   Distance = 500.0
 #   LightNode __VERSION__ = 1
+#
+# TPG SUBSTATION TUNING:
+# The donor 0.07 brightness is appropriate for a small watchtower fixture but the
+# user confirmed nine such lights are far too faint across the substation yard.
+# Keep every structural/beam/version field donor-identical and increase ONLY
+# Brightness to 5.0 (~71.4x donor output). This isolates output tuning from the now
+# proven working serialization/placement architecture.
 
 CONNECTOR_PREFIX = "TPG_YARD_FLOOD_"
 COUNT = 9
 
 DONOR_COLOR = (1.0, 0.9, 0.9)
-DONOR_BRIGHTNESS = 0.07
+SUBSTATION_BRIGHTNESS = 5.0
 DONOR_PHI = 1.0
 DONOR_THETA = 0.5
 DONOR_DISTANCE = 500.0
@@ -159,18 +165,17 @@ def light_node(strings, name, parent_data):
     out += struct.pack("<I", strings.index("model::LightNode"))
     name_bytes = name.encode("cp1251")
     out += struct.pack("<I", len(name_bytes)) + name_bytes
-    out += struct.pack("<I", 0)  # NodeBase unknown
+    out += struct.pack("<I", 0)
 
-    # NodeBase property set: exact donor legacy LightNode v1 marker.
     out += struct.pack("<I", 1)
     out += prop(strings, "__VERSION__", "model::Property<unsigned int>", 1)
 
     out += struct.pack("<I", parent_data)
-    out += struct.pack("<B", 1)  # isSpot
+    out += struct.pack("<B", 1)
 
     light_props = [
         prop(strings, "Color", "model::Property<osg::Vec3f>", DONOR_COLOR),
-        prop(strings, "Brightness", "model::Property<float>", DONOR_BRIGHTNESS),
+        prop(strings, "Brightness", "model::Property<float>", SUBSTATION_BRIGHTNESS),
         prop(strings, "Phi", "model::Property<float>", DONOR_PHI),
         prop(strings, "Theta", "model::Property<float>", DONOR_THETA),
         prop(strings, "Distance", "model::Property<float>", DONOR_DISTANCE),
@@ -178,7 +183,7 @@ def light_node(strings, name, parent_data):
     out += struct.pack("<I", len(light_props))
     for p in light_props:
         out += p
-    out += struct.pack("<B", 0)  # donor LightNode trailer
+    out += struct.pack("<B", 0)
     return bytes(out)
 
 
@@ -188,13 +193,11 @@ def inject(path):
     version, original_strings, body_start = parse_header(data)
 
     if "LIGHT_NODES" in original_strings and b"TPG_MASSUN_FLOOD_" in data:
-        raise RuntimeError("Massun donor LightNodes already injected")
+        raise RuntimeError("Massun-style LightNodes already injected")
 
     strings = ensure_strings(original_strings)
     group_pos, connectors = find_connectors(data, body_start, original_strings)
 
-    # CONNECTORS is the first render-item group in both the legacy exporter and
-    # current official exporter. The uint immediately before it is the group count.
     group_count_pos = group_pos - 4
     if group_count_pos < body_start:
         raise RuntimeError("Invalid render-item group count position")
@@ -210,20 +213,20 @@ def inject(path):
     group += struct.pack("<II", strings.index("LIGHT_NODES"), COUNT)
     for idx, connector_name, parent_data in connectors:
         group += light_node(strings, f"TPG_MASSUN_FLOOD_{idx:02d}", parent_data)
-        print(f"Inject light {idx}: connector={connector_name} parentData={parent_data}")
+        print(f"Inject light {idx}: connector={connector_name} parentData={parent_data} brightness={SUBSTATION_BRIGHTNESS}")
     body += group
 
     string_blob = encode_strings(strings)
     rebuilt = b"EDM" + struct.pack("<H", version) + struct.pack("<I", len(string_blob)) + string_blob + bytes(body)
 
-    # Hard validation of the generated footer.
     if rebuilt.count(b"TPG_MASSUN_FLOOD_") != COUNT:
         raise RuntimeError("Injected light names failed validation")
     if b"model::LightNode" not in rebuilt or b"LIGHT_NODES" not in rebuilt:
         raise RuntimeError("Injected LightNode strings missing")
 
     path.write_bytes(rebuilt)
-    print(f"Injected {COUNT} donor-exact legacy LightNode v1 spotlights into {path.name}")
+    print(f"Injected {COUNT} Massun-architecture legacy LightNode v1 spotlights into {path.name}")
+    print(f"Brightness: donor 0.07 -> substation {SUBSTATION_BRIGHTNESS} ({SUBSTATION_BRIGHTNESS/0.07:.1f}x)")
     print(f"EDM size: {len(data)} -> {len(rebuilt)} bytes; render-item groups {old_group_count} -> {old_group_count + 1}")
 
 
