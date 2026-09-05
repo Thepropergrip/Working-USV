@@ -40,9 +40,9 @@ declare_plugin("TPG Electrical Substation V1.0 LIGHTS",
     installed = true,
     dirName = current_mod_path,
     displayName = _("TPG Electrical Substation V1.0 LIGHTS"),
-    version = "1.0.2-LIGHTS-FORT",
+    version = "1.1.0-PROJECTOR",
     state = "installed",
-    info = _("High-detail electrical substation registered as an immobile Fortification so DCS services its yard lights")
+    info = _("High-detail electrical substation with nine connector-driven DCS projector floods and emissive fixture lenses")
 })
 mount_vfs_model_path(current_mod_path.."/Shapes")
 mount_vfs_texture_path(current_mod_path.."/Textures")
@@ -52,10 +52,16 @@ plugin_done()
 Set-Content -Path (Join-Path $pkg "entry.lua") -Value $entry -Encoding UTF8
 
 $dbLua = @'
--- LIGHTS edition deliberately uses the full stationary Ground Unit/Fortification
--- registration path.  The visual asset is still completely immobile and unarmed,
--- but this causes DCS to instantiate the unit-side light controller used by working
--- light towers and other illuminated stationary ground equipment.
+-- TPG Electrical Substation V1.0 LIGHTS v1.1.0
+--
+-- IMPORTANT CHANGE FROM THE FAILED TESTS:
+--  * The visible substation EDM itself now contains nine correctly oriented EDM connectors.
+--  * There are ZERO embedded Blender/official-exporter Light nodes (avoids Wrong light version).
+--  * The fixture lenses are real emissive EDM material geometry.
+--  * DCS projector lights use the current "Spot" + lamp_prototypes form WITHOUT the
+--    intensity_max=20/24 override that made the previous projector tests effectively marker lights.
+--  * A low-power omni fill is paired with each projector to provide local ambient spill.
+
 GT = {}
 GT_t.ws = 0
 set_recursive_metatable(GT, GT_t.generic_stationary)
@@ -78,9 +84,7 @@ GT.mapclasskey = "P0091000076"
 GT.positioning = "BYNORMAL"
 GT.CustomAimPoint = {0, 4.0, 0}
 
--- Critical difference from the failed Static/Structures registrations.
--- This remains a stationary, zero-mobility, no-weapon object, but DCS sees it via
--- the same Ground Unit -> Fortification path used by illuminated light-tower assets.
+-- Stationary/unarmed ground object so DCS instantiates external-light services.
 GT.attribute = {
     wsType_Ground,
     wsType_Tank,
@@ -105,30 +109,73 @@ GT.shape_table_data = {
     }
 }
 
-local yard_lights = {}
+local flood_lights = {}
+local projector_proto = nil
+if lamp_prototypes then
+    projector_proto = lamp_prototypes.LFS_P_27_1000 or lamp_prototypes.LFS_P_27_200
+end
+
 for i = 0, 8 do
-    yard_lights[#yard_lights + 1] = {
-        typename = "spotlight",
-        connector = "TPG_YARD_SPOT_" .. i,
-        color = {1.0, 0.82, 0.58},
-        intensity_max = 12.0,
-        angle_max = math.rad(38),
-        dont_change_color = true,
-        angle_change_rate = 0,
+    local c = "TPG_YARD_FLOOD_" .. i
+
+    if projector_proto then
+        -- Current DCS projector form. Do NOT set intensity_max here: the prototype
+        -- owns projector output. Previous tests incorrectly clamped this to 20/24.
+        flood_lights[#flood_lights + 1] = {
+            typename = "Spot",
+            connector = c,
+            proto = projector_proto,
+            range = 110.0,
+            angle_min = math.rad(18.0),
+            angle_max = math.rad(68.0),
+            exposure = {{25, 0.075, 0.085}},
+            movable = false,
+            power_up_t = 0.01,
+            use_full_connector_position = true,
+            color = {1.0, 0.78, 0.56},
+        }
+    else
+        -- Compatibility fallback matching the older DCS spotlight table family,
+        -- this time at real floodlight output instead of the failed 12/20 values.
+        flood_lights[#flood_lights + 1] = {
+            typename = "spotlight",
+            connector = c,
+            intensity_max = 1500.0,
+            color = {1.0, 0.78, 0.56},
+            angle_max = math.rad(68.0),
+            pos_correction = {0, 0, 0},
+            use_full_connector_position = true,
+            dont_change_color = true,
+            angle_change_rate = 0,
+        }
+    end
+
+    -- Real ambient fill around each fixture. This is intentionally far stronger
+    -- than a 3.0 navigation light but much weaker than the projected flood.
+    flood_lights[#flood_lights + 1] = {
+        typename = "omnilight",
+        connector = c,
+        intensity_max = 35.0,
+        color = {1.0, 0.70, 0.46},
+        pos_correction = {0, 0, 0},
+        use_full_connector_position = true,
     }
 end
 
--- Keep an explicit top-level collection, matching DCS light-data conventions,
--- rather than handing the runtime only a bare numbered subcollection.
-GT.lights = {
+local controller = {
     typename = "collection",
     lights = {
         [1] = {
             typename = "collection",
-            lights = yard_lights,
+            lights = flood_lights,
         },
     },
 }
+
+-- Different DCS object families have historically looked at one or the other.
+-- Assign both to the same controller rather than maintaining divergent tables.
+GT.lights = controller
+GT.lights_data = controller
 
 add_surface_unit(GT)
 GT = nil
@@ -136,32 +183,35 @@ GT = nil
 Set-Content -Path (Join-Path $db "db_tpg_electrical_substation_lights.lua") -Value $dbLua -Encoding UTF8
 
 $readme = @'
-TPG Electrical Substation V1.0 LIGHTS v1.0.2
-=============================================
+TPG Electrical Substation V1.0 LIGHTS v1.1.0 PROJECTOR
+======================================================
 
-Install:
-Copy the folder "TPG_Electrical_Substation_V1_LIGHTS" into:
+INSTALL
+Delete/replace any older folder named:
+  TPG_Electrical_Substation_V1_LIGHTS
+
+Then copy this folder into:
   Saved Games\DCS\Mods\tech\
 
-This version coexists with:
+This LIGHTS edition coexists with the untouched original:
   TPG_Electrical_Substation_V1
 
-Mission Editor placement for this corrected build:
-  Ground Units -> Fortification -> TPG Electrical Substation V1.0 LIGHTS
+MISSION EDITOR
+Ground Units -> Fortification -> TPG Electrical Substation V1.0 LIGHTS
 
-Important:
-- It is intentionally registered as a stationary Fortification rather than a plain Static Structure.
-- It has a STATIC chassis, no weapons, no detection/threat capability and no usable mobility.
-- This registration is specifically to make DCS instantiate the unit-side lighting controller.
+WHAT CHANGED
+- Same high-fidelity substation layout and geometry.
+- Nine actual EDM connectors are embedded in the visible intact model and both LODs.
+- Each connector is aimed inward/down into the yard.
+- Warm emissive lens geometry is added to all nine existing lamp heads.
+- ZERO embedded Blender Light nodes, avoiding DCS 2.9.29 "Wrong light version".
+- Projected lights use DCS current typename="Spot" + lamp_prototypes projector form.
+- The failed Build 9 intensity_max=24 clamp is removed; projector output now comes from
+  LFS_P_27_1000 (or LFS_P_27_200 fallback).
+- Each fixture also has a 35-intensity omni fill for obvious local ambient spill.
+- Destroyed model intentionally has no connectors/emissive lenses.
 
-LIGHTS v1.0.2:
-- Same high-fidelity substation geometry/layout
-- Nine existing yard fixtures retain named EDM connectors
-- DCS unit-side light collection drives nine warm spotlights
-- EDM lamp lenses remain self-illuminated
-- Embedded EDM spot lights remain as a secondary fallback
-- Destroyed model has no active connector/spot lights
-- Original non-LIGHTS static-structure edition remains unchanged and can coexist
+This is not another invisible light-only overlay and does not require a second object.
 '@
 Set-Content -Path (Join-Path $pkg "README.txt") -Value $readme -Encoding UTF8
 
