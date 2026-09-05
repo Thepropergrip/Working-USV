@@ -4,14 +4,6 @@ import bpy
 # IMPORTANT: move only the existing STEER roots for wheel placement. Do not
 # rebuild/reparent the wheels; arg 8 roll and arg 9 steering hierarchy must remain
 # exactly as exported.
-#
-# V9 QA measured wheel mesh centers at approximately:
-#   front: x=+3.540, rear: x=-3.601
-#   left:  y=-1.5135, right: y=+1.523
-# against the intended source-derived Tacoma centers:
-#   front x=+1.740, rear x=-1.830, y=+/-0.805.
-# The FBX wheel meshes already carry most of their placement in child transforms, so
-# the STEER roots must stay near the origin rather than duplicating that translation.
 ROOT_CALIBRATION = {
     "FBX_Cylinder_STEER":      (-0.0600, -0.0965),
     "FBX_Cylinder.001_STEER": (-0.0590, -0.0965),
@@ -28,12 +20,8 @@ for name, (x, y) in ROOT_CALIBRATION.items():
     root.location.y = y
     print(f"[TPG TACOMA WHEEL CLOSEOUT] {name}: ({before.x:.4f},{before.y:.4f},{before.z:.4f}) -> ({x:.4f},{y:.4f},{before.z:.4f})")
 
-# Final 2016 TRD Off-Road hood cleanup. V9's center-only downward correction could
-# visually read as a shallow Sport-style scoop/recess in front and 3Q clay. The real
-# Off-Road hood is scoopless, so blend only the central top skin toward the surrounding
-# hood-shoulder height at the same longitudinal station. This is deliberately small,
-# capped, and does not touch the grille, lamps, fenders, wheel openings, rig, tuning,
-# collision, LOD structure, or exporter plumbing.
+# Final scoopless 2016 TRD Off-Road hood cleanup. Blend the center skin toward local
+# shoulder height; no Sport scoop/recess/power bulge is permitted.
 body = bpy.data.objects.get("FBX_Plane.001")
 if body is None or body.type != 'MESH':
     raise RuntimeError("Missing Tacoma hero body during hood closeout smoothing")
@@ -52,8 +40,6 @@ for vert in body.data.vertices:
     nearby = [sz for sx, sz in shoulder_samples if abs(sx - x) <= 0.055]
     if not nearby:
         continue
-    # Use the local upper hood shoulder rather than an average that could include
-    # underside/crease vertices. Preserve only a few millimeters of natural center crown.
     shoulder_z = max(nearby)
     crown = 0.004 * max(0.0, 1.0 - abs(y) / 0.30)
     target_z = shoulder_z - 0.004 + crown
@@ -63,5 +49,18 @@ for vert in body.data.vertices:
         hood_smooth_count += 1
 
 body.data.update()
+
+# Release-integration cleanup. Dedicated Round-3/4 clay proved that planar generated
+# fascia overlays sit visibly proud of the strongly swept FBX nose. Remove those
+# experimental TPG_FINAL_* inserts after the useful cab/hood/topper sculpt has run and
+# retain the source-derived front clip. This is visual-only and does not touch DCS
+# registration, collision, tuning, LODs, or the wheel animation hierarchy.
+removed = []
+for obj in list(bpy.data.objects):
+    if obj.name.startswith("TPG_FINAL_"):
+        removed.append(obj.name)
+        bpy.data.objects.remove(obj, do_unlink=True)
+
 print(f"[TPG TACOMA HOOD CLOSEOUT] scoopless center blend adjusted {hood_smooth_count} source vertices")
-print("[TPG TACOMA CLOSEOUT] wheel double-offset corrected; arg 8/9 preserved; scoopless Off-Road hood surface smoothed")
+print(f"[TPG TACOMA RELEASE CLEANUP] removed {len(removed)} proud experimental fascia objects")
+print("[TPG TACOMA CLOSEOUT] wheel double-offset corrected; arg 8/9 preserved; source front clip retained; scoopless Off-Road hood smoothed")
