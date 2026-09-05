@@ -27,11 +27,11 @@ for name, (tx, ty) in WHEEL_TARGETS.items():
     root.location.y = ty
     print(f"[TPG TACOMA FBX WHEEL CENTER] {name}: ({old.x:.3f},{old.y:.3f},{old.z:.3f}) -> ({tx:.3f},{ty:.3f},{old.z:.3f})")
 
-# V9 closeout silhouette correction. This keeps the V8 third-gen front-clip work but
-# explicitly locks the user's 2016 TRD Off-Road hood to a scoopless factory profile.
-# No Sport-style center intake, raised scoop, or center power bulge is allowed. The
-# greenhouse, wheel centers, beltline, doors, wheel openings, bed, rig, arguments,
-# tuning, LOD plumbing and exporter path remain untouched.
+# V10 closeout silhouette correction. This is intentionally the final narrow hero-body
+# pass: square the cab/roof transition enough to read as a 2016 third-gen Tacoma and
+# eliminate the residual scoop-like center depression in the TRD Off-Road hood.
+# Wheel centers, beltline, doors, wheel openings, bed, rig, arguments, tuning, LOD
+# plumbing, topper dimensions and exporter path remain untouched.
 body = bpy.data.objects.get("FBX_Plane.001")
 if body is None or body.type != 'MESH':
     raise RuntimeError("Missing source-derived Tacoma hero body FBX_Plane.001")
@@ -40,43 +40,41 @@ cab_count = roof_count = windshield_count = hood_count = nose_count = 0
 for vert in body.data.vertices:
     x, y, z = vert.co.x, vert.co.y, vert.co.z
 
-    # Narrow only above the beltline. Strength ramps toward the roof so lower door and
-    # fender widths remain source-derived. A 7.5% maximum roof narrowing gives the cab
-    # the visibly straighter Tacoma greenhouse shoulders missing in V6.
+    # Keep the source lower cab width. Above the beltline, taper toward the roof to get
+    # the straighter Tacoma greenhouse shoulders without touching doors/fenders.
     if -0.86 <= x <= 1.08 and z >= 1.33:
         t = min(1.0, max(0.0, (z - 1.33) / 0.47))
-        vert.co.y *= (1.0 - 0.075 * t)
+        vert.co.y *= (1.0 - 0.070 * t)
         cab_count += 1
 
-        # Flatten only the highest crown. Do not impose a procedural roof shape; retain
-        # each source vertex and compress excess crown height smoothly toward ~1.80 m.
-        if z > 1.72:
-            vert.co.z = 1.72 + (z - 1.72) * 0.62
+        # Final roof closeout: V9 clay still looked too domed/van-like. Compress only
+        # the upper crown and leave the lower roof rails/A-pillars source-derived.
+        if z > 1.66:
+            vert.co.z = 1.66 + (z - 1.66) * 0.42
             roof_count += 1
 
-    # The V6 side silhouette still had too much windshield rake. Shift only upper-front
-    # greenhouse vertices forward, strongest at the roof header, to stand the screen up
-    # without touching the hood/cowl or creating a new mesh.
-    if 0.48 <= x <= 1.10 and z >= 1.40:
-        tz = min(1.0, max(0.0, (z - 1.40) / 0.40))
-        tx = min(1.0, max(0.0, (x - 0.48) / 0.62))
-        vert.co.x += 0.055 * tz * (0.55 + 0.45 * tx)
+    # Stand the upper windshield/header up more decisively. The V9 clay still rolled
+    # continuously from hood into roof; a third-gen Tacoma has a clearer A-pillar/header
+    # break. Move only upper-front greenhouse vertices, strongest near the roof header.
+    if 0.44 <= x <= 1.12 and z >= 1.38:
+        tz = min(1.0, max(0.0, (z - 1.38) / 0.38))
+        tx = min(1.0, max(0.0, (x - 0.44) / 0.68))
+        vert.co.x += 0.105 * tz * (0.50 + 0.50 * tx)
         windshield_count += 1
 
-    # 2016 TRD Off-Road hood: broad and scoopless. Lower the hood crown uniformly,
-    # then take a small additional amount from the center strip so the source mesh cannot
-    # visually read as a TRD Sport scoop/power bulge in front or 3Q clay views.
+    # 2016 TRD Off-Road hood: broad and scoopless. Lower the overall source crown a
+    # touch, then RAISE/blend the center strip slightly relative to V9 so it cannot read
+    # as a recessed Sport-style scoop slot in front/3Q clay.
     if 1.00 <= x <= 2.58 and 1.00 <= z <= 1.43:
         tz = min(1.0, max(0.0, (z - 1.00) / 0.43))
-        vert.co.y *= (1.0 - 0.030 * tz)
-        vert.co.z -= 0.018 * tz
-        center_flatten = max(0.0, 1.0 - min(1.0, abs(y) / 0.34))
-        vert.co.z -= 0.006 * tz * center_flatten
+        vert.co.y *= (1.0 - 0.028 * tz)
+        vert.co.z -= 0.017 * tz
+        center_blend = max(0.0, 1.0 - min(1.0, abs(y) / 0.38))
+        vert.co.z += 0.006 * tz * center_blend
         hood_count += 1
 
-    # 2016 third-gen front-clip correction. Keep the lower bumper and wheel openings
-    # untouched, but stand the upper nose more upright and carry the hood leading edge
-    # slightly forward so front/3Q clay reads as the taller, blunter 2016 Tacoma front end.
+    # Retain the proven 2016 third-gen upper front-clip correction. Lower bumper and
+    # wheel openings remain untouched.
     if x >= 2.30 and 0.78 <= z <= 1.28:
         tx = min(1.0, max(0.0, (x - 2.30) / 0.40))
         tz = min(1.0, max(0.0, (z - 0.78) / 0.50))
@@ -84,15 +82,14 @@ for vert in body.data.vertices:
         vert.co.y *= (1.0 - 0.012 * tx)
         nose_count += 1
 
-    # Give the hood-to-grille break a little more vertical authority without moving
-    # lamps/accessories as separate objects. This affects only the front-most hood band.
+    # Preserve the hood-to-grille break from V8/V9.
     if x >= 2.12 and 1.24 <= z <= 1.46:
         tx = min(1.0, max(0.0, (x - 2.12) / 0.46))
         vert.co.x += 0.022 * tx
         vert.co.z += 0.010 * tx
 
 body.data.update()
-print(f"[TPG TACOMA HERO V9] source sculpt cab={cab_count} roof={roof_count} windshield={windshield_count} hood={hood_count} nose={nose_count}")
+print(f"[TPG TACOMA HERO V10] source sculpt cab={cab_count} roof={roof_count} windshield={windshield_count} hood={hood_count} nose={nose_count}")
 
 REMOVE_PREFIXES = (
     "CAMPER_BODY",
@@ -207,4 +204,4 @@ rear = [
 ]
 make_mesh("CAMPER_REAR_GLASS_HERO", rear, [tuple(range(len(rear)))], glass, smooth=False)
 
-print("[TPG TACOMA HERO V9] source wheel centers corrected; V7 greenhouse retained; 2016 third-gen scoopless Off-Road hood/front clip locked; V5 ARE-style topper retained")
+print("[TPG TACOMA HERO V10] wheel closeout calibration preserved; cab/header squared; scoopless 2016 Off-Road hood blended; V5 ARE-style topper retained")
