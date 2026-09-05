@@ -1,0 +1,161 @@
+name: TPG Substation LIGHTS Massun Donor Build
+
+on:
+  push:
+    branches:
+      - tpg-electrical-substation
+    paths:
+      - ".github/workflows/tpg-substation-lights-export.yml"
+      - "edm-jobs/build_tpg_substation_lights_*.py"
+      - "edm-jobs/add_tpg_substation_projector_connectors.py"
+      - "edm-jobs/inject_tpg_substation_massun_lightnodes.py"
+      - "edm-jobs/tpg_substation_lights_*.json"
+      - "edm-jobs/package_tpg_substation_lights.ps1"
+      - "edm-jobs/build_tpg_substation.py"
+      - "edm-jobs/tpg_substation_common.py"
+      - "tools/dcs-edm/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export-substation-lights:
+    runs-on: windows-latest
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: intact
+            job: edm-jobs/tpg_substation_lights_intact.json
+          - variant: lod1
+            job: edm-jobs/tpg_substation_lights_lod1.json
+          - variant: lod2
+            job: edm-jobs/tpg_substation_lights_lod2.json
+          - variant: destroyed
+            job: edm-jobs/tpg_substation_lights_destroyed.json
+    env:
+      BLENDER_VERSION: "4.1.1"
+      BLENDER_URL: "https://download.blender.org/release/Blender4.1/blender-4.1.1-windows-x64.zip"
+      ED_EXPORTER_COMMIT: "e03f94ed15c577822e0842923b054c456626770a"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Blender 4.1.1
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $zip = Join-Path $env:RUNNER_TEMP "blender.zip"
+          $dir = Join-Path $env:RUNNER_TEMP "blender"
+          Invoke-WebRequest -Uri $env:BLENDER_URL -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $dir -Force
+          $exe = Get-ChildItem -Path $dir -Filter blender.exe -Recurse | Select-Object -First 1
+          if (-not $exe) { throw "Blender executable not found." }
+          "BLENDER_EXE=$($exe.FullName)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Install official ED EDM exporter
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $src = Join-Path $env:RUNNER_TEMP "Blender-EDM-Exporter"
+          git clone --filter=blob:none https://github.com/EagleDynamics/Blender-EDM-Exporter.git $src
+          git -C $src checkout $env:ED_EXPORTER_COMMIT
+          $scripts = Join-Path $env:GITHUB_WORKSPACE ".edm-blender-scripts"
+          $addons = Join-Path $scripts "addons"
+          New-Item -ItemType Directory -Force -Path $addons | Out-Null
+          Copy-Item -Recurse -Force (Join-Path $src "io_scene_edm") (Join-Path $addons "io_scene_edm")
+          $upper = Join-Path $addons "io_scene_edm\Materials"
+          $temp = Join-Path $addons "io_scene_edm\__materials_casefix"
+          $lower = Join-Path $addons "io_scene_edm\materials"
+          if (Test-Path $upper) {
+            Rename-Item $upper "__materials_casefix"
+            Rename-Item $temp "materials"
+          }
+          if (-not (Test-Path (Join-Path $lower "__init__.py"))) { throw "ED material package normalization failed." }
+          if (-not (Test-Path (Join-Path $addons "io_scene_edm\pyedm_311.pyd"))) { throw "Official pyedm_311.pyd missing." }
+          "BLENDER_USER_SCRIPTS=$scripts" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Using ED exporter commit $env:ED_EXPORTER_COMMIT"
+
+      - name: Export ${{ matrix.variant }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $out = Join-Path $env:GITHUB_WORKSPACE "edm-artifacts"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          & $env:BLENDER_EXE --background --python "tools/dcs-edm/export_job.py" -- --job "${{ matrix.job }}" --artifact-dir "$out"
+          if ($LASTEXITCODE -ne 0) { throw "EDM export failed for ${{ matrix.variant }}." }
+          $edm = Get-ChildItem $out -Filter *.edm -File
+          if (-not $edm) { throw "No EDM produced for ${{ matrix.variant }}." }
+          $edm | ForEach-Object { Write-Host "$($_.Name) $($_.Length) bytes" }
+
+      - name: Inject donor-verified legacy LightNode v1 floods
+        if: matrix.variant != 'destroyed'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $out = Join-Path $env:GITHUB_WORKSPACE "edm-artifacts"
+          $edm = Get-ChildItem $out -Filter *.edm -File | Select-Object -First 1
+          if (-not $edm) { throw "No EDM found for donor light injection." }
+          python "edm-jobs/inject_tpg_substation_massun_lightnodes.py" "$($edm.FullName)"
+          if ($LASTEXITCODE -ne 0) { throw "Massun donor LightNode injection failed for ${{ matrix.variant }}." }
+          $bytes = [System.IO.File]::ReadAllBytes($edm.FullName)
+          $ascii = [System.Text.Encoding]::ASCII.GetString($bytes)
+          $hits = ([regex]::Matches($ascii, "TPG_MASSUN_FLOOD_")).Count
+          if ($hits -ne 9) { throw "Expected 9 injected donor flood names, found $hits" }
+          if ($ascii -notmatch "model::LightNode" -or $ascii -notmatch "LIGHT_NODES") { throw "Legacy LightNode footer missing after injection" }
+          Write-Host "Verified donor LightNode injection: 9 floods in $($edm.Name), $($edm.Length) bytes"
+
+      - name: Verify destroyed model remains dark
+        if: matrix.variant == 'destroyed'
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:GITHUB_WORKSPACE "edm-artifacts"
+          $edm = Get-ChildItem $out -Filter *.edm -File | Select-Object -First 1
+          $bytes = [System.IO.File]::ReadAllBytes($edm.FullName)
+          $ascii = [System.Text.Encoding]::ASCII.GetString($bytes)
+          if ($ascii -match "TPG_MASSUN_FLOOD_") { throw "Destroyed model unexpectedly contains donor lights" }
+          Write-Host "Destroyed model verified dark/no donor light nodes."
+
+      - name: Upload ${{ matrix.variant }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: tpg-substation-lights-${{ matrix.variant }}
+          path: edm-artifacts/**
+          if-no-files-found: error
+          retention-days: 30
+
+  package-substation-lights:
+    needs: export-substation-lights
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download exported variants
+        uses: actions/download-artifact@v4
+        with:
+          pattern: tpg-substation-lights-*
+          path: edm-artifacts
+          merge-multiple: true
+
+      - name: Package DCS LIGHTS drop-in
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          & "edm-jobs/package_tpg_substation_lights.ps1"
+          if (-not $?) { throw "Packaging failed." }
+          $zip = "edm-artifacts\TPG_Electrical_Substation_V1_LIGHTS_DCS_DropIn.zip"
+          if (-not (Test-Path $zip)) { throw "Final DCS ZIP missing." }
+          Get-Item $zip | ForEach-Object { Write-Host "FINAL PACKAGE: $($_.FullName) $($_.Length) bytes" }
+
+      - name: Upload final DCS LIGHTS package
+        uses: actions/upload-artifact@v4
+        with:
+          name: TPG-Electrical-Substation-V1-LIGHTS-MASSUN-DONOR-DCS-DropIn
+          path: edm-artifacts/TPG_Electrical_Substation_V1_LIGHTS/**
+          if-no-files-found: error
+          retention-days: 30

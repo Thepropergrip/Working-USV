@@ -1,0 +1,6 @@
+{
+  "mode": "script",
+  "script": "edm-jobs/build_tpg_substation_lod2.py",
+  "output": "TPG_Electrical_Substation_V1_LOD2.edm",
+  "save_blend": false
+}

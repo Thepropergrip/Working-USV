@@ -1,0 +1,6 @@
+{
+  "mode": "script",
+  "script": "edm-jobs/build_tpg_substation_lights_intact.py",
+  "output": "TPG_Electrical_Substation_V1_LIGHTS.edm",
+  "save_blend": true
+}
