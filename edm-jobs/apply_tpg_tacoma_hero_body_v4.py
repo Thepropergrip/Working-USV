@@ -27,14 +27,14 @@ for name, (tx, ty) in WHEEL_TARGETS.items():
     root.location.y = ty
     print(f"[TPG TACOMA FBX WHEEL CENTER] {name}: ({old.x:.3f},{old.y:.3f},{old.z:.3f}) -> ({tx:.3f},{ty:.3f},{old.z:.3f})")
 
-# V7 front/cab silhouette correction. This REPLACES the V6 sculpt; it is not an
+# V8 front/cab silhouette correction. This REPLACES the V7 sculpt; it is not an
 # additional patch layered on top. Every build starts from the compact original-FBX
-# body payload, then this single source-vertex pass is applied once. Clay V6 proved the
-# wheel centers substantially corrected but the greenhouse still read too rounded and
-# van-like in side/3Q views. V7 therefore works on the actual source body only: it
-# narrows the roof more decisively, flattens the crown, and stands the windshield upper
-# edge slightly more upright while preserving the beltline, doors, wheel openings, bed,
-# rig, arguments, tuning, LOD plumbing and exporter path.
+# body payload, then this single source-vertex pass is applied once. V7 corrected the
+# rounded greenhouse, but the nose logic still described the older 2012-2015 Tacoma.
+# The user's truck is a 2016 third-generation DCLB, whose hero silhouette needs a taller,
+# blunter front fascia and a more assertive hood-to-grille break. V8 preserves the V7
+# greenhouse, wheel centers, beltline, doors, wheel openings, bed, rig, arguments,
+# tuning, LOD plumbing and exporter path while correcting only the upper front clip.
 body = bpy.data.objects.get("FBX_Plane.001")
 if body is None or body.type != 'MESH':
     raise RuntimeError("Missing source-derived Tacoma hero body FBX_Plane.001")
@@ -75,15 +75,26 @@ for vert in body.data.vertices:
         vert.co.z -= 0.016 * tz * (1.0 - 0.35 * center)
         hood_count += 1
 
-    # Preserve the conservative squared nose correction from V6.
-    if x >= 2.38 and 0.62 <= z <= 1.24:
-        tx = min(1.0, max(0.0, (x - 2.38) / 0.32))
-        vert.co.x += 0.018 * tx
-        vert.co.y *= (1.0 - 0.018 * tx)
+    # 2016 third-gen front-clip correction. The previous pass was biased toward the
+    # older 2012-2015 fascia. Keep the lower bumper and wheel openings untouched, but
+    # stand the upper nose more upright and carry the hood leading edge slightly forward
+    # so front/3Q clay reads as the taller, blunter 2016 Tacoma front end.
+    if x >= 2.30 and 0.78 <= z <= 1.28:
+        tx = min(1.0, max(0.0, (x - 2.30) / 0.40))
+        tz = min(1.0, max(0.0, (z - 0.78) / 0.50))
+        vert.co.x += (0.020 + 0.022 * tz) * tx
+        vert.co.y *= (1.0 - 0.012 * tx)
         nose_count += 1
 
+    # Give the hood-to-grille break a little more vertical authority without moving
+    # lamps/accessories as separate objects. This affects only the front-most hood band.
+    if x >= 2.12 and 1.24 <= z <= 1.46:
+        tx = min(1.0, max(0.0, (x - 2.12) / 0.46))
+        vert.co.x += 0.022 * tx
+        vert.co.z += 0.010 * tx
+
 body.data.update()
-print(f"[TPG TACOMA HERO V7] source sculpt cab={cab_count} roof={roof_count} windshield={windshield_count} hood={hood_count} nose={nose_count}")
+print(f"[TPG TACOMA HERO V8] source sculpt cab={cab_count} roof={roof_count} windshield={windshield_count} hood={hood_count} nose={nose_count}")
 
 REMOVE_PREFIXES = (
     "CAMPER_BODY",
@@ -198,4 +209,4 @@ rear = [
 ]
 make_mesh("CAMPER_REAR_GLASS_HERO", rear, [tuple(range(len(rear)))], glass, smooth=False)
 
-print("[TPG TACOMA HERO V7] source wheel centers corrected; source greenhouse/roof/windshield silhouette refined; V5 ARE-style topper retained")
+print("[TPG TACOMA HERO V8] source wheel centers corrected; V7 greenhouse retained; 2016 third-gen upper front clip refined; V5 ARE-style topper retained")
