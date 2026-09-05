@@ -40,9 +40,9 @@ declare_plugin("TPG Electrical Substation V1.0 LIGHTS",
     installed = true,
     dirName = current_mod_path,
     displayName = _("TPG Electrical Substation V1.0 LIGHTS"),
-    version = "1.2.0-MASSUN-DONOR",
+    version = "1.3.0-NIGHT-GATED-TEXTURED",
     state = "installed",
-    info = _("High-detail electrical substation with nine donor-matched legacy LightNode v1 floodlights embedded directly in the rendered EDM")
+    info = _("High-detail substation with inward legacy LightNode floods, automatic night gating, deeper terrain bed, and tiled PBR surface upgrade")
 })
 mount_vfs_model_path(current_mod_path.."/Shapes")
 mount_vfs_texture_path(current_mod_path.."/Textures")
@@ -52,94 +52,99 @@ plugin_done()
 Set-Content -Path (Join-Path $pkg "entry.lua") -Value $entry -Encoding UTF8
 
 $dbLua = @'
--- LIGHTS v1.2 uses the exact architecture proven by the user-provided working
--- Massun92 watchtower EDM: legacy model::LightNode v1 SPOT nodes embedded directly
--- in the rendered EDM. No GT.lights / lights_data controller is used.
+-- LIGHTS v1.3
+-- Embedded legacy LightNode v1 floods are brightness-animated on argument 31.
+-- Registering as a stationary ground unit and declaring headlights=31 lets DCS
+-- drive the lights off in daylight and on when ground-unit headlights are active.
 
-local function add_structure(f)
-    f.shape_table_data = {
-        {
-            file = f.ShapeName,
-            life = f.Life,
-            username = f.Name,
-            desrt = f.ShapeNameDestr or "self",
-            classname = "lLandVehicle",
-            positioning = "BYNORMAL",
-        }
+GT = {}
+GT_t.ws = 0
+set_recursive_metatable(GT, GT_t.generic_stationary)
+set_recursive_metatable(GT.chassis, GT_t.CH_t.STATIC)
+
+GT.chassis.life = 1200
+GT.visual.shape = "TPG_Electrical_Substation_V1_LIGHTS"
+GT.visual.shape_dstr = "TPG_Electrical_Substation_V1_LIGHTS_Destroyed"
+GT.visual.fire_size = 0.8
+GT.visual.fire_pos = {0, 0, 0}
+GT.visual.fire_time = 120
+GT.time_agony = 180
+
+GT.Name = "TPG_Electrical_Substation_V1_LIGHTS"
+GT.DisplayName = _("TPG Electrical Substation V1.0 LIGHTS")
+GT.Rate = 100
+GT.DetectionRange = 0
+GT.ThreatRange = 0
+GT.mapclasskey = "P0091000076"
+GT.positioning = "BYNORMAL"
+GT.CustomAimPoint = {0, 4.0, 0}
+
+GT.animation_arguments = {
+    headlights = 31,
+}
+
+GT.attribute = {
+    wsType_Ground,
+    wsType_Tank,
+    wsType_NoWeapon,
+    wsType_GenericFort,
+    "Fortifications",
+}
+GT.category = "Fortification"
+
+GT.shape_table_data = {
+    {
+        file = "TPG_Electrical_Substation_V1_LIGHTS",
+        life = 1200,
+        username = "TPG_Electrical_Substation_V1_LIGHTS",
+        desrt = "TPG_Electrical_Substation_V1_LIGHTS_Destroyed",
+        classname = "lLandVehicle",
+        positioning = "BYNORMAL",
+    },
+    {
+        name = "TPG_Electrical_Substation_V1_LIGHTS_Destroyed",
+        file = "TPG_Electrical_Substation_V1_LIGHTS_Destroyed",
     }
+}
 
-    if f.ShapeNameDestr then
-        f.shape_table_data[#f.shape_table_data + 1] = {
-            name = f.ShapeNameDestr,
-            file = f.ShapeNameDestr,
-        }
-    end
-
-    f.mapclasskey = "P0091000076"
-    f.attribute = {wsType_Static, wsType_Standing, "Structures"}
-    add_surface_unit(f)
-end
-
-add_structure({
-    Name = "TPG_Electrical_Substation_V1_LIGHTS",
-    DisplayName = _("TPG Electrical Substation V1.0 LIGHTS"),
-    ShapeName = "TPG_Electrical_Substation_V1_LIGHTS",
-    ShapeNameDestr = "TPG_Electrical_Substation_V1_LIGHTS_Destroyed",
-    Life = 1200,
-    Rate = 100,
-    category = "Structures",
-    SeaObject = false,
-    isPutToWater = false,
-    numParking = 0,
-})
+add_surface_unit(GT)
+GT = nil
 '@
 Set-Content -Path (Join-Path $db "db_tpg_electrical_substation_lights.lua") -Value $dbLua -Encoding UTF8
 
 $readme = @'
-TPG Electrical Substation V1.0 LIGHTS v1.2.0 MASSUN DONOR
-==========================================================
+TPG Electrical Substation V1.0 LIGHTS v1.3.0
+================================================
 
 INSTALL
 Delete/replace any older folder named:
   TPG_Electrical_Substation_V1_LIGHTS
 
-Then copy this folder into:
+Copy this folder into:
   Saved Games\DCS\Mods\tech\
 
-The untouched original remains compatible and can coexist:
+The untouched original can coexist:
   TPG_Electrical_Substation_V1
 
 MISSION EDITOR
-Static Objects -> Structures -> TPG Electrical Substation V1.0 LIGHTS
+Ground Units -> Fortification -> TPG Electrical Substation V1.0 LIGHTS
 
-WHAT IS DIFFERENT
-This build is based directly on the user-provided known-working in-game Massun92
-M92_Container_watchtower_lights EDMs, not on guessed Lua projector definitions.
+CHANGES IN THIS BUILD
+- Proven Massun-style legacy model::LightNode v1 architecture retained.
+- Nine flood transforms are corrected to face inward/down into the facility.
+- Flood maximum brightness reduced to 0.55 from the overexposed 5.0 test.
+- Effective light distance reduced to 160 m from 500 m to stop washing out surrounding terrain.
+- Light brightness is animated on DCS ground-unit headlights argument 31:
+  daytime/off = 0, nighttime/on = 0.55.
+- Permanent emissive lamp-lens glow removed so fixtures do not appear lit during the day.
+- Foundation buried skirt deepened to about 1.65 m below local origin to hide exposed flat edges on uneven terrain.
+- Ground-bed UVs use meter-scaled planar projection around slopes/bends instead of one stretched wrap.
+- Main control-building brick UVs use meter-scaled projection around sides/bevels.
+- Ground and brick materials contain dedicated normal-map slots for the supplied PBR texture sets.
+- Destroyed model remains dark.
 
-Binary inspection of the working donor showed its main floods are:
-- EDM v10 model::LightNode
-- LightNode __VERSION__ = 1
-- isSpot = 1
-- Color = {1.0, 0.9, 0.9}
-- Brightness = 0.07
-- Phi = 1.0
-- Theta = 0.5
-- Distance = 500.0
-
-The intact substation and LOD1/LOD2 are first exported by the official ED exporter
-with nine correctly aimed transform/connectors and emissive fixture lenses. A binary
-post-process then injects nine legacy LightNode v1 records using the exact donor values
-and parents each one to the corresponding fixture transform.
-
-There are:
-- NO modern official-exporter SpotLight/OmniLight nodes
-- NO GT.lights
-- NO GT.lights_data
-- NO secondary overlay object
-- NO light EDM hidden in the collision shell
-
-The far/destroyed models intentionally carry no active donor lights, matching the donor
-principle of omitting light nodes from the farthest LOD.
+The final distributed package replaces the generated ground and brick texture placeholders
+with the user's supplied ground_0020 and bricks_0015 color/normal/AO/roughness maps.
 '@
 Set-Content -Path (Join-Path $pkg "README.txt") -Value $readme -Encoding UTF8
 
