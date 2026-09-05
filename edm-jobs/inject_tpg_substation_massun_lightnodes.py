@@ -2,36 +2,27 @@ import argparse
 import struct
 from pathlib import Path
 
-# Injects proven legacy EDM v10 model::LightNode v1 spotlights into an otherwise
-# modern official-exporter EDM. DCS 2.9.29 accepts this LightNode family and the
-# user's in-game test confirmed it produces real visible light and ground spread.
+# Legacy EDM v10 model::LightNode v1 spotlights, donor-verified against the user's
+# working Massun92 watchtower EDMs. DCS 2.9.29 accepts this LightNode family and
+# the user's in-game test confirmed it produces real terrain/object illumination.
 #
-# Donor basis: user-provided, known-working Massun92
-# M92_Container_watchtower_lights_lods0/1/2.edm.
-# Donor main flood values:
-#   isSpot = 1
-#   Color = (1.0, 0.9, 0.9)
-#   Brightness = 0.07
-#   Phi = 1.0
-#   Theta = 0.5
-#   Distance = 500.0
-#   LightNode __VERSION__ = 1
-#
-# TPG SUBSTATION TUNING:
-# The donor 0.07 brightness is appropriate for a small watchtower fixture but the
-# user confirmed nine such lights are far too faint across the substation yard.
-# Keep every structural/beam/version field donor-identical and increase ONLY
-# Brightness to 5.0 (~71.4x donor output). This isolates output tuning from the now
-# proven working serialization/placement architecture.
+# Final substation tuning after in-game feedback:
+# - Brightness reduced from the overexposed 5.0 test to 0.55.
+# - Effective distance reduced from donor 500 m to 160 m so the yard is lit without
+#   washing out hundreds of metres of surrounding terrain.
+# - Brightness is animated on argument 31 (DCS ground-unit headlights). Day/off = 0,
+#   night/on = 0.55. The database declares animation_arguments.headlights = 31.
+# - Phi/Theta/color/version remain in the proven donor format.
 
 CONNECTOR_PREFIX = "TPG_YARD_FLOOD_"
 COUNT = 9
+HEADLIGHT_ARG = 31
 
 DONOR_COLOR = (1.0, 0.9, 0.9)
-SUBSTATION_BRIGHTNESS = 5.0
+SUBSTATION_BRIGHTNESS = 0.55
 DONOR_PHI = 1.0
 DONOR_THETA = 0.5
-DONOR_DISTANCE = 500.0
+SUBSTATION_DISTANCE = 160.0
 
 
 def u32(buf, off):
@@ -61,6 +52,7 @@ def ensure_strings(strings):
         "model::Property<unsigned int>",
         "model::Property<float>",
         "model::Property<osg::Vec3f>",
+        "model::AnimatedProperty<float>",
         "__VERSION__",
         "Color",
         "Brightness",
@@ -133,7 +125,7 @@ def find_connectors(data, body_start, strings):
     if len(candidates) != 1:
         raise RuntimeError(f"Expected one connector group containing {COUNT} {CONNECTOR_PREFIX}* connectors, found {len(candidates)}")
 
-    group_pos, all_connectors, hits = candidates[0]
+    group_pos, _, hits = candidates[0]
     ordered = []
     for name, parent in hits:
         try:
@@ -160,6 +152,21 @@ def prop(strings, name, type_name, value):
     return bytes(out)
 
 
+def animated_brightness(strings, max_value):
+    # Matches the legacy BlenderEdmExporter EDMAnimatedProperty<float> /
+    # EDMAnimationSet layout: type+name, argument, key count, then (double x,float y).
+    # DCS ground-unit headlights argument 31 is 0 during day/off and 1 at night/on.
+    out = bytearray(struct.pack(
+        "<II",
+        strings.index("model::AnimatedProperty<float>"),
+        strings.index("Brightness"),
+    ))
+    out += struct.pack("<II", HEADLIGHT_ARG, 3)
+    for frame, value in ((-1.0, 0.0), (0.0, 0.0), (1.0, max_value)):
+        out += struct.pack("<df", frame, value)
+    return bytes(out)
+
+
 def light_node(strings, name, parent_data):
     out = bytearray()
     out += struct.pack("<I", strings.index("model::LightNode"))
@@ -175,10 +182,10 @@ def light_node(strings, name, parent_data):
 
     light_props = [
         prop(strings, "Color", "model::Property<osg::Vec3f>", DONOR_COLOR),
-        prop(strings, "Brightness", "model::Property<float>", SUBSTATION_BRIGHTNESS),
+        animated_brightness(strings, SUBSTATION_BRIGHTNESS),
         prop(strings, "Phi", "model::Property<float>", DONOR_PHI),
         prop(strings, "Theta", "model::Property<float>", DONOR_THETA),
-        prop(strings, "Distance", "model::Property<float>", DONOR_DISTANCE),
+        prop(strings, "Distance", "model::Property<float>", SUBSTATION_DISTANCE),
     ]
     out += struct.pack("<I", len(light_props))
     for p in light_props:
@@ -213,7 +220,10 @@ def inject(path):
     group += struct.pack("<II", strings.index("LIGHT_NODES"), COUNT)
     for idx, connector_name, parent_data in connectors:
         group += light_node(strings, f"TPG_MASSUN_FLOOD_{idx:02d}", parent_data)
-        print(f"Inject light {idx}: connector={connector_name} parentData={parent_data} brightness={SUBSTATION_BRIGHTNESS}")
+        print(
+            f"Inject light {idx}: connector={connector_name} parentData={parent_data} "
+            f"brightness={SUBSTATION_BRIGHTNESS} distance={SUBSTATION_DISTANCE} arg={HEADLIGHT_ARG}"
+        )
     body += group
 
     string_blob = encode_strings(strings)
@@ -223,10 +233,12 @@ def inject(path):
         raise RuntimeError("Injected light names failed validation")
     if b"model::LightNode" not in rebuilt or b"LIGHT_NODES" not in rebuilt:
         raise RuntimeError("Injected LightNode strings missing")
+    if b"model::AnimatedProperty<float>" not in rebuilt:
+        raise RuntimeError("Animated brightness property missing")
 
     path.write_bytes(rebuilt)
-    print(f"Injected {COUNT} Massun-architecture legacy LightNode v1 spotlights into {path.name}")
-    print(f"Brightness: donor 0.07 -> substation {SUBSTATION_BRIGHTNESS} ({SUBSTATION_BRIGHTNESS/0.07:.1f}x)")
+    print(f"Injected {COUNT} night-gated legacy LightNode v1 spotlights into {path.name}")
+    print(f"Brightness max={SUBSTATION_BRIGHTNESS}; distance={SUBSTATION_DISTANCE} m; headlights arg={HEADLIGHT_ARG}")
     print(f"EDM size: {len(data)} -> {len(rebuilt)} bytes; render-item groups {old_group_count} -> {old_group_count + 1}")
 
 
