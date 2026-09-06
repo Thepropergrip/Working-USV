@@ -8,12 +8,13 @@ from collections import defaultdict
 # DCS wheel hierarchy, arg 8 wheel roll, arg 9 steering, gameplay tuning, collision,
 # LOD/destroyed structure, materials, registration and official ED exporter are untouched.
 #
-# V24 clay-gate correction, 2026-09-06:
-# V23 is exporter/package green and finally gives the source glasshouse perimeter a visible
-# geometric normal break without deepening the windows again. Preserve that exact cab work.
-# Move the next hero-body correction to the front clip: the source nose still needs a clearer
-# third-gen Tacoma hood-leading break and a slightly more upright upper grille relationship
-# so the hood does not visually melt into the fascia in front/front-3Q clay.
+# V25 clay-gate correction, 2026-09-06:
+# V24 proved the side-window wells are hitting the original FBX (62 vertices), but its
+# narrow perimeter test hit only 2 vertices, so the frame break was effectively invisible
+# on the sparse source topology. Keep the proven 55 mm wells exactly unchanged. Replace
+# only the ineffective edge test with broader feathered source-skin perimeter bands around
+# each well so existing vertices can carry a shallow 8-12 mm outward shoulder in clay.
+# No new geometry, no added window objects, and no deeper glasshouse recess.
 #
 # Exporter safety remains strict: existing source FBX vertices only, bounded millimeter-scale
 # deformation, no new topology/objects, no remesh, and no changes to wheel animation,
@@ -86,17 +87,36 @@ for v in body.data.vertices:
                 v.co.y -= sign * (0.055 * strength)
                 stats["side_window_recess"] += 1
 
-            # V23: shallow perimeter ridge in the same source skin. It is intentionally
-            # much smaller than the recess; the purpose is a normal break, not a new panel.
-            # Preserve B-pillar gap by evaluating each front/rear window independently.
-            edge_x = min(abs(x - x0), abs(x - x1))
-            edge_z = min(abs(z - 1.415), abs(z - 1.695))
-            if (edge_x <= 0.050 or edge_z <= 0.040) and ay >= 0.610:
-                fx = max(0.0, 1.0 - edge_x / 0.050)
-                fz = max(0.0, 1.0 - edge_z / 0.040)
-                frame = max(fx, fz)
-                v.co.y += sign * (0.012 * frame)
-                stats["side_window_frame"] += 1
+    # V25 source-skin glasshouse perimeter bands. The V24 edge test only found two source
+    # vertices, so define wider bands immediately around the established wells. These are
+    # shallow outward shoulders, not separate frames: they simply make the A/B/C pillars,
+    # roof rail and beltline survive smooth clay shading on the sparse FBX topology.
+    if 0.545 <= ay <= 0.805:
+        window = None
+        if 0.08 <= x <= 0.82:
+            window = (0.08, 0.82)
+        elif -0.92 <= x <= -0.17:
+            window = (-0.92, -0.17)
+        if window is not None:
+            x0, x1 = window
+            band = 0.0
+
+            # Lower and upper rails: 75-80 mm bands centered just outside the well.
+            if 1.365 <= z < 1.415:
+                band = max(band, (z - 1.365) / 0.050)
+            elif 1.695 < z <= 1.775:
+                band = max(band, 1.0 - (z - 1.695) / 0.080)
+
+            # Front/rear pillar shoulders: wider than V24 so real source vertices are hit.
+            if x0 - 0.085 <= x < x0 and 1.405 <= z <= 1.715:
+                band = max(band, (x - (x0 - 0.085)) / 0.085)
+            elif x1 < x <= x1 + 0.085 and 1.405 <= z <= 1.715:
+                band = max(band, 1.0 - (x - x1) / 0.085)
+
+            if band > 0.0:
+                # Cap at 10 mm. Enough for a clay normal break, far below the 55 mm well.
+                v.co.y += sign * (0.010 * max(0.0, min(1.0, band)))
+                stats["side_window_perimeter_band"] += 1
 
     # Proven V21 windshield well. Keep depth unchanged at 45 mm.
     if 0.56 <= x <= 1.08 and 1.415 <= z <= 1.695 and ay <= 0.59:
@@ -173,4 +193,4 @@ for v in body.data.vertices:
 
 body.data.update()
 
-print("[TPG TACOMA CANONICAL PHOTO MATCH] V24 front-clip hood-leading silhouette pass complete", dict(stats))
+print("[TPG TACOMA CANONICAL PHOTO MATCH] V25 broad source glasshouse perimeter pass complete", dict(stats))
