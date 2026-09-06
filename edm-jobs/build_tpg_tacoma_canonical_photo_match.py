@@ -8,15 +8,15 @@ from collections import defaultdict
 # DCS wheel hierarchy, arg 8 wheel roll, arg 9 steering, gameplay tuning, collision,
 # LOD/destroyed structure, materials, registration and official ED exporter are untouched.
 #
-# V21 clay-gate correction, 2026-09-06:
-# V20 proved that the source FBX window/windshield selections are valid (62 side-window
-# and 69 windshield vertices were edited), but the 30/26 mm wells disappeared visually
-# under the source smoothing in side/front-3Q clay QA. Keep the same original-FBX topology,
-# pillar/header/beltline keep-outs and single-pass strategy, but make those wells deeper
-# and their feather bands tighter so the glasshouse reads structurally at DCS viewing
-# distance. No procedural replacement body panels are added.
+# V22 clay-gate correction, 2026-09-06:
+# V21 is exporter/package green and finally makes the source-FBX glasshouse relief survive
+# smoothing. Continue forward at the next major silhouette junction: the rear double-cab /
+# topper interface. Preserve the exporter-proven CAMPER_HERO_SHELL_V16 topology and only
+# deform existing vertices. Tighten its front upper shoulders, stand the front station more
+# vertically, and level its front roof edge toward the squared DCLB cab roof. No mesh creation,
+# remeshing, wheel/animation changes, gameplay edits, or package/exporter changes.
 #
-# Exporter safety: source-mesh vertices only. The exporter-proven generated topper remains.
+# Exporter safety: source/topper mesh vertices only. No procedural replacement body panels.
 
 body = bpy.data.objects.get("FBX_Plane.001")
 if body is None or body.type != 'MESH':
@@ -138,4 +138,41 @@ for v in body.data.vertices:
         stats["rear_cab"] += 1
 
 body.data.update()
-print("[TPG TACOMA CANONICAL PHOTO MATCH] V21 sharper source-glasshouse relief complete", dict(stats))
+
+# V22 topper transition: deform only the already exporter-proven topper shell. The goal is
+# a cleaner ARE-style cap/cab junction in side and rear/front 3Q clay: less swollen at the
+# front shoulders, a more nearly vertical front station, and a roof edge that meets the
+# squared Tacoma cab roof without a visible hump. Rear station/long-bed length are untouched.
+topper = bpy.data.objects.get("CAMPER_HERO_SHELL_V16")
+if topper is not None and topper.type == 'MESH':
+    for v in topper.data.vertices:
+        x, y, z = v.co.x, v.co.y, v.co.z
+        ay = abs(y)
+        sign = 1.0 if y >= 0.0 else -1.0
+        if -1.50 <= x <= -1.08:
+            front = 1.0 - min(1.0, max(0.0, (-1.08 - x) / 0.42))
+
+            # Tighten only the upper front shoulders; keep the bed-rail footprint unchanged.
+            if z >= 1.48 and ay >= 0.42:
+                target_ay = ay * (1.0 - 0.015 * front)
+                v.co.y = sign * target_ay
+                stats["topper_front_shoulders"] += 1
+
+            # Pull the upper front station toward one clean near-vertical plane. Small clamp
+            # prevents a risky wholesale cap translation and preserves all existing topology.
+            if z >= 1.50:
+                target_x = -1.105 - 0.004 * min(1.0, max(0.0, (z - 1.50) / 0.34))
+                v.co.x += max(-0.010, min(0.010, (target_x - x) * 0.30 * front))
+                stats["topper_front_station"] += 1
+
+            # Level only the front roof band toward the rear cab roof; no rear-cap height edit.
+            if z >= 1.78:
+                edge = min(1.0, ay / 0.72)
+                target_z = 1.807 - 0.010 * edge
+                v.co.z += max(-0.008, min(0.006, (target_z - z) * 0.38 * front))
+                stats["topper_front_roof"] += 1
+    topper.data.update()
+else:
+    print("[TPG TACOMA CANONICAL PHOTO MATCH] V22 topper object not present; body pass still valid")
+
+print("[TPG TACOMA CANONICAL PHOTO MATCH] V22 glasshouse + rear cab/topper silhouette pass complete", dict(stats))
