@@ -11,6 +11,7 @@ on:
       - "edm-jobs/inject_tpg_substation_massun_lightnodes.py"
       - "edm-jobs/tpg_substation_lights_*.json"
       - "edm-jobs/package_tpg_substation_lights.ps1"
+      - "edm-jobs/optimize_tpg_substation_static_export.py"
       - "edm-jobs/build_tpg_substation.py"
       - "edm-jobs/tpg_substation_common.py"
       - "tools/dcs-edm/**"
@@ -37,8 +38,8 @@ jobs:
             job: edm-jobs/tpg_substation_lights_destroyed.json
     env:
       BLENDER_VERSION: "4.1.1"
-      BLENDER_URL: "https://download.blender.org/release/Blender4.1/blender-4.1.1-windows-x64.zip"
-      ED_EXPORTER_COMMIT: "e03f94ed15c577822e0842923b054c456626770a"
+      BLENDER_URL: https://download.blender.org/release/Blender4.1/blender-4.1.1-windows-x64.zip
+      ED_EXPORTER_COMMIT: e03f94ed15c577822e0842923b054c456626770a
 
     steps:
       - name: Checkout
