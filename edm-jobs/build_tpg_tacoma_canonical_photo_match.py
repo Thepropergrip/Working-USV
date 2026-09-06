@@ -8,13 +8,13 @@ from collections import defaultdict
 # DCS wheel hierarchy, arg 8 wheel roll, arg 9 steering, gameplay tuning, collision,
 # LOD/destroyed structure, materials, registration and official ED exporter are untouched.
 #
-# V25 clay-gate correction, 2026-09-06:
-# V24 proved the side-window wells are hitting the original FBX (62 vertices), but its
-# narrow perimeter test hit only 2 vertices, so the frame break was effectively invisible
-# on the sparse source topology. Keep the proven 55 mm wells exactly unchanged. Replace
-# only the ineffective edge test with broader feathered source-skin perimeter bands around
-# each well so existing vertices can carry a shallow 8-12 mm outward shoulder in clay.
-# No new geometry, no added window objects, and no deeper glasshouse recess.
+# V26 clay-gate correction, 2026-09-06:
+# V25 broadened the side-window perimeter bands so the sparse FBX topology can actually
+# carry a visible pillar/rail normal break while preserving the proven 55 mm side wells.
+# Apply the same evidence-based correction to the windshield: retain the proven 45 mm well
+# exactly unchanged, but replace its narrow V23 <=50 mm frame test with broader feathered
+# source-skin shoulders around the A-pillar/header/cowl perimeter. No new geometry, no
+# windshield object, no deeper recess, and no front-clip movement outside that perimeter.
 #
 # Exporter safety remains strict: existing source FBX vertices only, bounded millimeter-scale
 # deformation, no new topology/objects, no remesh, and no changes to wheel animation,
@@ -127,16 +127,30 @@ for v in body.data.vertices:
             v.co.x -= 0.045 * strength
             stats["windshield_recess"] += 1
 
-        # V23 windshield perimeter: a <=10 mm forward ridge around the existing well.
-        # This stays inside the source windshield field and does not move the front clip.
-        edge_x = min(abs(x - 0.56), abs(x - 1.08))
-        edge_z = min(abs(z - 1.415), abs(z - 1.695))
-        if edge_x <= 0.050 or edge_z <= 0.040:
-            fx = max(0.0, 1.0 - edge_x / 0.050)
-            fz = max(0.0, 1.0 - edge_z / 0.040)
-            frame = max(fx, fz)
-            v.co.x += 0.010 * frame
-            stats["windshield_frame"] += 1
+    # V26 source-skin windshield perimeter shoulders. The old V23 <=50 mm edge test used
+    # the same sparse-topology assumption that failed on the side glass. Use broader bands
+    # just outside the established well so real source vertices can define the A-pillars,
+    # header and cowl break in front/front-3Q clay without changing the well itself.
+    if ay <= 0.61:
+        band = 0.0
+
+        # Rear/header and forward/cowl shoulders in X, immediately outside the well.
+        if 0.485 <= x < 0.56 and 1.405 <= z <= 1.715:
+            band = max(band, (x - 0.485) / 0.075)
+        elif 1.08 < x <= 1.165 and 1.405 <= z <= 1.715:
+            band = max(band, 1.0 - (x - 1.08) / 0.085)
+
+        # Lower and upper windshield rails in Z, bounded to the windshield span.
+        if 0.55 <= x <= 1.09:
+            if 1.350 <= z < 1.415:
+                band = max(band, (z - 1.350) / 0.065)
+            elif 1.695 < z <= 1.785:
+                band = max(band, 1.0 - (z - 1.695) / 0.090)
+
+        if band > 0.0:
+            # Up to 10 mm forward normal break; no topology or gross silhouette movement.
+            v.co.x += 0.010 * max(0.0, min(1.0, band))
+            stats["windshield_perimeter_band"] += 1
 
     # Retain only a very small cowl break.
     if 1.12 <= x <= 1.42 and 1.29 <= z <= 1.40 and ay <= 0.76:
@@ -193,4 +207,4 @@ for v in body.data.vertices:
 
 body.data.update()
 
-print("[TPG TACOMA CANONICAL PHOTO MATCH] V25 broad source glasshouse perimeter pass complete", dict(stats))
+print("[TPG TACOMA CANONICAL PHOTO MATCH] V26 broad windshield perimeter pass complete", dict(stats))
