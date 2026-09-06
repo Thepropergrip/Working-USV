@@ -1,6 +1,6 @@
 {
   "mode": "script",
-  "script": "edm-jobs/build_grizzly_rc4.py",
-  "output": "TPG_GRIZZLY_HELLFIRE.edm",
+  "script": "edm-jobs/build_grizzly_stow_probe.py",
+  "output": "TPG_GRIZZLY_STOW_PROBE.edm",
   "save_blend": true
 }
