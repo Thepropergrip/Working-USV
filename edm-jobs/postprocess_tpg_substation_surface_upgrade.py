@@ -61,11 +61,15 @@ def planar_tile_uv(obj, meters_per_tile=3.0):
             uv.data[li].uv = (u, v)
 
 
-# Material handles created by tpg_substation_common.mats().
+# Material handles created by tpg_substation_common.mats() and the user-asset upgrade.
 ground_mat = bpy.data.materials.get('TPG_SUB100_Gravel')
 brick_mat = bpy.data.materials.get('TPG_SUB100_UtilityBrick')
+xfmr_user_mat = bpy.data.materials.get('TPG_USER_Transformer')
+panel_user_mat = bpy.data.materials.get('TPG_USER_ControlPanel')
 ensure_flat_normal(ground_mat, 'TPG_SUB100_Gravel_Normal.png')
 ensure_flat_normal(brick_mat, 'TPG_SUB100_UtilityBrick_Normal.png')
+ensure_flat_normal(xfmr_user_mat, 'TPG_USER_Transformer_Normal.png')
+ensure_flat_normal(panel_user_mat, 'TPG_USER_ControlPanel_Normal.png')
 
 # Ground bed: use one continuous real ground material and push the buried skirt much
 # farther below grade. The foundation builder emits three equal-size rings: top, toe,
@@ -101,4 +105,16 @@ if ctrl:
         ctrl.data.materials.append(brick_mat)
     planar_tile_uv(ctrl, meters_per_tile=2.0)
 
-print('TPG surface upgrade applied: deep foundation skirt, tiled ground bed, tiled brick building, normal-map slots')
+# User-supplied transformer/control-panel textures are atlas-style assets. Apply a
+# moderate world-projected density to the procedural replacement geometry so the PBR
+# weathering/detail reads consistently instead of stretching over an entire transformer.
+for obj in bpy.context.scene.objects:
+    if obj.type != 'MESH' or not obj.data.materials:
+        continue
+    names = {m.name for m in obj.data.materials if m}
+    if 'TPG_USER_Transformer' in names:
+        planar_tile_uv(obj, meters_per_tile=2.4)
+    elif 'TPG_USER_ControlPanel' in names:
+        planar_tile_uv(obj, meters_per_tile=1.0)
+
+print('TPG surface upgrade applied: deep foundation skirt, tiled ground/brick/user assets, normal-map slots')
