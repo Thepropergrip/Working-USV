@@ -4,4 +4,5 @@ os.environ["TPG_TACOMA_DESTROYED"]="0"
 os.environ["TPG_TACOMA_LOD"]="1"
 runpy.run_path("edm-jobs/build_tpg_tacoma.py", run_name="__main__")
 runpy.run_path("edm-jobs/build_tpg_tacoma_canonical_photo_match.py", run_name="__main__")
+runpy.run_path("edm-jobs/build_tpg_tacoma_hero_silhouette_v32.py", run_name="__main__")
 runpy.run_path("edm-jobs/build_tpg_tacoma_wheel_closeout.py", run_name="__main__")
