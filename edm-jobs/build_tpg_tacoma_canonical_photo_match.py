@@ -13,7 +13,14 @@ from collections import defaultdict
 # with broad coordinate bands. Clay QA showed those bands smoothing away the source FBX's
 # pillar/window/door-top definition and producing a generic featureless cab. Preserve the
 # original FBX greenhouse/A-B pillar/window topology here. Only bounded roof-shoulder,
-# cowl/hood, fender-shoulder, upper-nose and rear-cab station corrections remain.
+# header/beltline, cowl/hood, fender-shoulder, upper-nose and rear-cab station corrections
+# remain.
+#
+# V18 clay-gate correction:
+# The 636c16d clay set was exporter-green but still read as a smooth cab bubble in side and
+# front-3Q views. The two strongest missing Tacoma silhouette cues were a distinct roof-
+# header break and a defined beltline shoulder. Add only narrow source-mesh bands for those
+# cues; do not globally narrow/rake the greenhouse or rebuild window/pillar topology.
 #
 # Exporter safety: this stage stays source-mesh-only. The exporter-proven generated topper
 # is retained until any replacement topper has independently passed the ED EDM exporter.
@@ -38,8 +45,32 @@ for v in body.data.vertices:
         v.co.y += (sign * target_ay - y) * 0.30
         stats["roof_shoulders"] += 1
 
+    # V18: define the leading roof/header break without touching the windshield field.
+    # A very narrow band at the roof's front edge gets a flatter upper target and a tiny
+    # rearward set. This creates the Tacoma-like roof/header corner visible in side/3Q clay
+    # while leaving the A-pillar and windshield vertices immediately below source-derived.
+    if 0.30 <= x <= 0.56 and 1.73 <= z <= 1.86 and ay <= 0.73:
+        fx = min(1.0, max(0.0, (x - 0.30) / 0.26))
+        target_z = 1.812 - 0.006 * fx
+        v.co.z += max(-0.008, min(0.010, (target_z - z) * 0.36))
+        v.co.x -= 0.0045 * fx
+        stats["roof_header_break"] += 1
+
     # IMPORTANT: no canonical greenhouse narrowing and no canonical windshield rake.
     # Those broad bands erased source FBX window/pillar character in the clay gate.
+
+    # V18: narrow beltline shoulder only. Push the lower door-top strip slightly outward
+    # and the immediately-above strip slightly inward. The paired 4-8 mm offsets create a
+    # readable body shoulder without moving the actual window/pillar topology as a block.
+    if -1.05 <= x <= 0.92 and 0.48 <= ay <= 0.79:
+        if 1.285 <= z <= 1.345:
+            strength = 1.0 - min(1.0, abs(z - 1.315) / 0.030)
+            v.co.y += sign * (0.0080 * strength)
+            stats["beltline_lower"] += 1
+        elif 1.350 <= z <= 1.405:
+            strength = 1.0 - min(1.0, abs(z - 1.3775) / 0.0275)
+            v.co.y -= sign * (0.0045 * strength)
+            stats["beltline_upper"] += 1
 
     # Retain only a very small cowl break. The source A-pillar/windshield stays untouched.
     if 1.12 <= x <= 1.42 and 1.29 <= z <= 1.40 and ay <= 0.76:
@@ -77,4 +108,4 @@ for v in body.data.vertices:
         stats["rear_cab"] += 1
 
 body.data.update()
-print("[TPG TACOMA CANONICAL PHOTO MATCH] source greenhouse/pillars preserved; bounded body pass complete", dict(stats))
+print("[TPG TACOMA CANONICAL PHOTO MATCH] V18 roof-header/beltline silhouette pass complete", dict(stats))
