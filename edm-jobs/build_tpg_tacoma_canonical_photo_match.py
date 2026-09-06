@@ -8,12 +8,12 @@ from collections import defaultdict
 # gameplay tuning, collision, LOD/destroyed structure, materials, registration and the
 # official ED exporter are untouched.
 #
-# V34, 2026-09-06:
-# Fresh V33 side/front/front-3Q/rear-3Q clay was inspected directly and rejected. The build
-# path is healthy, but the cab still reads as a smooth fastback-like mass: windshield too
-# swept, header/cowl break too weak, and side glass/pillars too soft in clay. Stop making tiny
-# incremental nudges. Apply one stronger, bounded source-FBX silhouette reset here, using only
-# existing FBX_Plane.001 vertices. No replacement shell, remesh, or chained body pass.
+# V35, 2026-09-06:
+# Fresh V34 side/front/front-3Q/rear-3Q clay was inspected directly. Export/package is green,
+# but visual QA still rejects the truck: the nose is too pinched and domed in front view, with
+# the hood center and fender tops flowing together instead of reading as the broad, flatter
+# 2016 Tacoma hood deck plus distinct outer shoulders. Preserve V34's stronger cab reset and
+# make the next correction in this same canonical source-FBX pass. Existing vertices only.
 
 body = bpy.data.objects.get("FBX_Plane.001")
 if body is None or body.type != 'MESH':
@@ -26,13 +26,13 @@ for v in body.data.vertices:
     sign = 1.0 if y >= 0.0 else -1.0
 
     # DCLB cab roof: broad, nearly level slab with a controlled outer shoulder rather than
-    # the rounded crossover-like crown seen in V33 clay.
+    # the rounded crossover-like crown seen in earlier clay.
     if -0.78 <= x <= 0.60 and 1.68 <= z <= 1.88 and ay <= 0.75:
         front = max(0.0, min(1.0, (x + 0.78) / 1.38))
         edge = min(1.0, ay / 0.75)
         target_z = 1.786 - 0.003 * front - 0.010 * edge
         v.co.z += max(-0.032, min(0.014, (target_z - z) * 0.72))
-        stats["v34_roof_plane"] += 1
+        stats["roof_plane"] += 1
 
     # Square the outer roof shoulders so the roof side break survives clay lighting.
     if -1.12 <= x <= 0.52 and 1.68 <= z <= 1.84 and 0.55 <= ay <= 0.76:
@@ -43,24 +43,23 @@ for v in body.data.vertices:
         v.co.y += (sign * target_ay - y) * 0.42
         stats["roof_shoulders"] += 1
 
-    # Stronger canonical roof/header station. Carry the leading header forward so the roof
+    # Strong canonical roof/header station. Carry the leading header forward so the roof
     # terminates above the windshield instead of flowing into the old fastback sweep.
     if 0.18 <= x <= 0.66 and 1.67 <= z <= 1.84 and ay <= 0.74:
         fx = min(1.0, max(0.0, (x - 0.18) / 0.48))
         target_z = 1.788 - 0.008 * fx
         v.co.z += max(-0.022, min(0.010, (target_z - z) * 0.64))
         v.co.x += 0.030 * fx
-        stats["v34_header_station"] += 1
+        stats["header_station"] += 1
 
-    # Stand the outer A-pillar rail materially more upright. This is bounded to the actual
-    # upper rail and leaves mirrors/fenders/doors outside the region untouched.
+    # Stand the outer A-pillar rail materially more upright.
     if 0.48 <= x <= 1.02 and 1.48 <= z <= 1.77 and 0.49 <= ay <= 0.77:
         zf = min(1.0, max(0.0, (z - 1.48) / 0.29))
         xf = 1.0 - min(1.0, abs(x - 0.75) / 0.27)
         delta_x = 0.046 * zf * xf
         v.co.x += delta_x
         v.co.y += sign * (0.0055 * zf * xf)
-        stats["v34_upper_a_pillar"] += 1
+        stats["upper_a_pillar"] += 1
 
     # Narrow the upper greenhouse while retaining the original FBX window/pillar topology.
     if -1.06 <= x <= 0.90 and 1.41 <= z <= 1.73 and 0.49 <= ay <= 0.83:
@@ -83,8 +82,7 @@ for v in body.data.vertices:
             v.co.y -= sign * (0.0060 * strength)
             stats["beltline_upper"] += 1
 
-    # Side glass wells are still the original body skin, not inserted window objects. V33's
-    # 55 mm recess was visually swallowed in clay, so use a stronger but bounded 68 mm well.
+    # Side glass wells are the original body skin, not inserted window objects.
     if 0.555 <= ay <= 0.800 and 1.405 <= z <= 1.705:
         window = None
         if 0.06 <= x <= 0.84:
@@ -99,10 +97,9 @@ for v in body.data.vertices:
             strength = max(0.0, min(ex, ez, ey))
             if strength > 0.0:
                 v.co.y -= sign * (0.068 * strength)
-                stats["v34_side_window_recess"] += 1
+                stats["side_window_recess"] += 1
 
-    # Broader source-skin perimeter shoulder gives A/B/C pillars, roof rail and beltline a
-    # readable edge in smooth clay without adding geometry.
+    # Source-skin perimeter shoulder gives A/B/C pillars, roof rail and beltline a readable edge.
     if 0.535 <= ay <= 0.815:
         window = None
         if 0.06 <= x <= 0.84:
@@ -122,17 +119,16 @@ for v in body.data.vertices:
                 band = max(band, 1.0 - (x - x1) / 0.105)
             if band > 0.0:
                 v.co.y += sign * (0.016 * max(0.0, min(1.0, band)))
-                stats["v34_side_window_perimeter"] += 1
+                stats["side_window_perimeter"] += 1
 
-    # Windshield well remains carved from the FBX body skin. Increase the bounded separation
-    # slightly so the glass plane is visible in clay before applying the upright stance below.
+    # Windshield well remains carved from the FBX body skin.
     if 0.54 <= x <= 1.10 and 1.405 <= z <= 1.705 and ay <= 0.60:
         ex = min((x - 0.54) / 0.065, (1.10 - x) / 0.070, 1.0)
         ez = min((z - 1.405) / 0.055, (1.705 - z) / 0.060, 1.0)
         strength = max(0.0, min(ex, ez))
         if strength > 0.0:
             v.co.x -= 0.052 * strength
-            stats["v34_windshield_recess"] += 1
+            stats["windshield_recess"] += 1
 
     # Windshield perimeter shoulder, existing body vertices only.
     if ay <= 0.62:
@@ -148,10 +144,9 @@ for v in body.data.vertices:
                 band = max(band, 1.0 - (z - 1.705) / 0.095)
         if band > 0.0:
             v.co.x += 0.014 * max(0.0, min(1.0, band))
-            stats["v34_windshield_perimeter"] += 1
+            stats["windshield_perimeter"] += 1
 
-    # Hard side-profile gate correction: collapse the windshield's front/rear X spread.
-    # Upper glass comes forward strongly; lower glass/cowl anchor moves slightly rearward.
+    # Collapse the windshield front/rear X spread for a more Tacoma-like upright stance.
     if 0.46 <= x <= 1.20 and 1.36 <= z <= 1.78 and ay <= 0.66:
         zf = max(0.0, min(1.0, (z - 1.36) / 0.42))
         center = 1.0 - min(1.0, ay / 0.66)
@@ -159,19 +154,19 @@ for v in body.data.vertices:
             upper = (zf - 0.44) / 0.56
             delta = 0.066 * upper * (0.70 + 0.30 * center)
             v.co.x += delta
-            stats["v34_windshield_upper_forward"] += 1
+            stats["windshield_upper_forward"] += 1
         else:
             lower = (0.44 - zf) / 0.44
             delta = 0.026 * lower * (0.70 + 0.30 * center)
             v.co.x -= delta
-            stats["v34_windshield_lower_rearward"] += 1
+            stats["windshield_lower_rearward"] += 1
 
-    # More distinct cowl shelf directly ahead of the upright glass.
+    # Distinct cowl shelf directly ahead of the upright glass.
     if 1.06 <= x <= 1.48 and 1.21 <= z <= 1.43 and ay <= 0.67:
         xf = 1.0 - min(1.0, abs(x - 1.27) / 0.21)
         yf = 1.0 - min(1.0, ay / 0.67)
         v.co.z -= 0.022 * max(0.0, xf) * (0.68 + 0.32 * yf)
-        stats["v34_cowl_break"] += 1
+        stats["cowl_break"] += 1
 
     # Scoopless TRD Off-Road hood plateau.
     if 1.18 <= x <= 2.34 and 1.11 <= z <= 1.37 and ay <= 0.58:
@@ -180,6 +175,29 @@ for v in body.data.vertices:
         blend = 0.58 if ay <= 0.30 else 0.40
         v.co.z += max(-0.018, min(0.010, (target_z - z) * blend))
         stats["hood_plateau"] += 1
+
+    # V35 hero-body gate: broaden and square the hood deck. In V34 front clay the hood still
+    # pinches inward and rounds over like a dome. Carry the deck farther outward with only a
+    # shallow lateral crown, while keeping the wheel-arch/fender skin outside this envelope.
+    if 1.26 <= x <= 2.30 and 1.12 <= z <= 1.39 and 0.40 <= ay <= 0.74:
+        tx = min(1.0, max(0.0, (x - 1.26) / 1.04))
+        edge = min(1.0, max(0.0, (ay - 0.40) / 0.34))
+        target_z = 1.304 - 0.019 * tx - 0.010 * edge
+        v.co.z += max(-0.022, min(0.010, (target_z - z) * 0.62))
+        target_ay = ay + 0.018 * (0.35 + 0.65 * tx) * (1.0 - 0.35 * edge)
+        v.co.y = sign * min(0.790, target_ay)
+        stats["v35_hood_outer_deck"] += 1
+
+    # V35 front-fender crown: establish the distinct horizontal shoulder visible above the
+    # Tacoma headlamp/fender instead of letting it merge into the hood dome.
+    if 1.70 <= x <= 2.38 and 1.08 <= z <= 1.34 and 0.66 <= ay <= 0.86:
+        fx = min(1.0, max(0.0, (x - 1.70) / 0.68))
+        fy = 1.0 - min(1.0, abs(ay - 0.76) / 0.10)
+        weight = max(0.0, fy) * (0.45 + 0.55 * fx)
+        target_z = 1.286 - 0.010 * fx
+        v.co.z += max(-0.016, min(0.008, (target_z - z) * 0.52 * weight))
+        v.co.y += sign * (0.012 * weight)
+        stats["v35_fender_crown"] += 1
 
     # Hood-leading break.
     if 2.10 <= x <= 2.34 and 1.18 <= z <= 1.34 and ay <= 0.62:
@@ -215,4 +233,4 @@ for v in body.data.vertices:
         stats["rear_cab"] += 1
 
 body.data.update()
-print("[TPG TACOMA CANONICAL PHOTO MATCH] V34 strong source-FBX silhouette reset complete", dict(stats))
+print("[TPG TACOMA CANONICAL PHOTO MATCH] V35 hood/front-fender source-FBX correction complete", dict(stats))
