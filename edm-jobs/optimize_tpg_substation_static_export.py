@@ -35,10 +35,12 @@ joined_objects = 0
 for mats, objs in buckets.items():
     if len(objs) < 2:
         continue
-    # Keep batches bounded to avoid one pathological mega-join while still
-    # cutting node count by orders of magnitude.
-    for start in range(0, len(objs), 250):
-        batch = [o for o in objs[start:start+250] if o.name in bpy.context.scene.objects]
+    # LOD0 still exceeded the 180-minute EDM export ceiling with 250-object
+    # batches. Increase only the export-time merge batch size to reduce EDM
+    # node count further; source geometry, materials, special nodes, lights,
+    # connectors and collision objects remain untouched.
+    for start in range(0, len(objs), 1000):
+        batch = [o for o in objs[start:start+1000] if o.name in bpy.context.scene.objects]
         if len(batch) < 2:
             continue
         bpy.ops.object.select_all(action='DESELECT')
