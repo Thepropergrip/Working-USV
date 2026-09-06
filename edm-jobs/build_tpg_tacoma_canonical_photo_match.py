@@ -3,16 +3,17 @@ from collections import defaultdict
 
 # Canonical Tacoma photo-match pass.
 # IMPORTANT: This is intentionally ONE source-mesh-derived body pass from FBX_Plane.001.
-# It replaces the old cumulative deformation chain. All body corrections are bounded and
-# applied in this single canonical loop so validated changes do not become patch-on-patch.
-# DCS wheel hierarchy, arg 8 wheel roll, arg 9 steering, gameplay tuning, collision,
-# LOD/destroyed structure, materials, registration and official ED exporter are untouched.
+# All body corrections are bounded and applied in this single canonical loop so validated
+# changes do not become patch-on-patch. DCS wheel hierarchy, arg 8 wheel roll, arg 9 steering,
+# gameplay tuning, collision, LOD/destroyed structure, materials, registration and the
+# official ED exporter are untouched.
 #
-# V28 consolidation, 2026-09-06:
-# V27's bounded windshield/header/cowl stance correction was source-mesh-derived but had
-# accidentally become a second geometry script after this pass. Fold that validated logic
-# into the canonical loop and retire the chained invocation. This is an architecture cleanup,
-# not a new procedural shell: existing FBX_Plane.001 vertices only, no topology/objects/remesh.
+# V31, 2026-09-06:
+# V30 correctly retired the chained V29 body patch, but fresh side/front/front-3Q/rear-3Q
+# clay still shows an over-tall rounded cab crown and weak roof/header/windshield/cowl break.
+# Integrate the stronger cab-break idea directly into this canonical source-mesh pass:
+# flatter/lower forward roof crown, more upright windshield differential, a modest upper
+# greenhouse tuck, and a clearer cowl station. Existing FBX vertices only; no new topology.
 
 body = bpy.data.objects.get("FBX_Plane.001")
 if body is None or body.type != 'MESH':
@@ -24,36 +25,53 @@ for v in body.data.vertices:
     ay = abs(y)
     sign = 1.0 if y >= 0.0 else -1.0
 
-    # Keep the source roof centerline and pillar/header geometry. Only square the outer
-    # roof shoulders slightly so the cab does not read as a rounded crossover roof.
-    if -1.12 <= x <= 0.48 and 1.72 <= z <= 1.84 and 0.56 <= ay <= 0.74:
+    # V31 cab crown reset: lower and flatten the forward cab roof while retaining the
+    # source centerline and rear roof. This is the main correction for the bubble silhouette.
+    if -0.72 <= x <= 0.58 and 1.70 <= z <= 1.86 and ay <= 0.74:
+        front = max(0.0, min(1.0, (x + 0.72) / 1.30))
+        edge = min(1.0, ay / 0.74)
+        target_z = 1.792 - 0.010 * front - 0.004 * edge
+        v.co.z += max(-0.024, min(0.010, (target_z - z) * 0.58))
+        stats["v31_roof_crown"] += 1
+
+    # Square the outer roof shoulders so the roof does not read like a crossover dome.
+    if -1.12 <= x <= 0.48 and 1.70 <= z <= 1.84 and 0.56 <= ay <= 0.74:
         edge = min(1.0, max(0.0, (ay - 0.56) / 0.18))
-        target_z = 1.812 - 0.010 * edge
-        v.co.z += max(-0.010, min(0.010, (target_z - z) * 0.40))
-        target_ay = min(0.725, max(ay, 0.655 + 0.050 * max(0.0, (z - 1.72) / 0.12)))
-        v.co.y += (sign * target_ay - y) * 0.30
+        target_z = 1.792 - 0.008 * edge
+        v.co.z += max(-0.014, min(0.008, (target_z - z) * 0.46))
+        target_ay = min(0.720, max(ay, 0.650 + 0.050 * max(0.0, (z - 1.70) / 0.14)))
+        v.co.y += (sign * target_ay - y) * 0.34
         stats["roof_shoulders"] += 1
 
-    # Leading roof/header break.
-    if 0.30 <= x <= 0.56 and 1.73 <= z <= 1.86 and ay <= 0.73:
-        fx = min(1.0, max(0.0, (x - 0.30) / 0.26))
-        target_z = 1.812 - 0.006 * fx
-        v.co.z += max(-0.008, min(0.010, (target_z - z) * 0.36))
-        v.co.x -= 0.0045 * fx
+    # Stronger leading header break: a distinct roof front station before the windshield.
+    if 0.22 <= x <= 0.62 and 1.69 <= z <= 1.84 and ay <= 0.73:
+        fx = min(1.0, max(0.0, (x - 0.22) / 0.40))
+        target_z = 1.794 - 0.014 * fx
+        v.co.z += max(-0.018, min(0.006, (target_z - z) * 0.52))
+        v.co.x -= 0.0070 * fx
         stats["roof_header_break"] += 1
 
-    # Stand only the OUTER upper A-pillar rail slightly more upright. The center windshield
-    # field is left for the dedicated recess below.
-    if 0.52 <= x <= 0.98 and 1.52 <= z <= 1.76 and 0.50 <= ay <= 0.76:
-        zf = min(1.0, max(0.0, (z - 1.52) / 0.24))
-        xf = 1.0 - min(1.0, abs(x - 0.75) / 0.23)
-        delta_x = 0.018 * zf * xf
+    # Stand only the OUTER upper A-pillar rail more upright. Center windshield remains for
+    # the dedicated recess and stance logic below.
+    if 0.50 <= x <= 1.00 and 1.50 <= z <= 1.76 and 0.50 <= ay <= 0.76:
+        zf = min(1.0, max(0.0, (z - 1.50) / 0.26))
+        xf = 1.0 - min(1.0, abs(x - 0.75) / 0.25)
+        delta_x = 0.026 * zf * xf
         v.co.x += delta_x
-        v.co.y += sign * (0.0045 * zf * xf)
+        v.co.y += sign * (0.0040 * zf * xf)
         stats["upper_a_pillar"] += 1
 
-    # Beltline shoulder. Paired small offsets define the door-top shoulder while leaving
-    # the window wells and actual pillar borders local and independent.
+    # V31 upper-greenhouse tuck: separate the glasshouse visually from the lower door skins.
+    if -1.04 <= x <= 0.88 and 1.43 <= z <= 1.72 and 0.50 <= ay <= 0.82:
+        zf = max(0.0, min(1.0, (z - 1.43) / 0.29))
+        front_fade = min(1.0, max(0.0, (0.88 - x) / 0.18))
+        rear_fade = min(1.0, max(0.0, (x + 1.04) / 0.18))
+        edge_fade = min(front_fade, rear_fade)
+        delta = 0.022 * (0.38 + 0.62 * zf) * edge_fade
+        v.co.y -= sign * delta
+        stats["v31_greenhouse_tuck"] += 1
+
+    # Beltline shoulder. Paired small offsets define the door-top shoulder.
     if -1.05 <= x <= 0.92 and 0.48 <= ay <= 0.79:
         if 1.285 <= z <= 1.345:
             strength = 1.0 - min(1.0, abs(z - 1.315) / 0.030)
@@ -128,41 +146,27 @@ for v in body.data.vertices:
             v.co.x += 0.010 * max(0.0, min(1.0, band))
             stats["windshield_perimeter_band"] += 1
 
-    # Canonicalized V27 windshield stance: differential movement makes the glass envelope
-    # more upright without adding a second body pass.
-    if 0.50 <= x <= 1.16 and 1.40 <= z <= 1.76 and ay <= 0.64:
-        zf = max(0.0, min(1.0, (z - 1.40) / 0.36))
+    # V31 stronger differential windshield stance integrated canonically, not chained.
+    if 0.48 <= x <= 1.18 and 1.38 <= z <= 1.76 and ay <= 0.64:
+        zf = max(0.0, min(1.0, (z - 1.38) / 0.38))
         center = 1.0 - min(1.0, ay / 0.64)
         if zf >= 0.48:
             upper = (zf - 0.48) / 0.52
-            delta = 0.025 * upper * (0.72 + 0.28 * center)
+            delta = 0.036 * upper * (0.72 + 0.28 * center)
             v.co.x += delta
-            stats["windshield_upper_forward"] += 1
+            stats["v31_windshield_upper_forward"] += 1
         else:
             lower = (0.48 - zf) / 0.48
-            delta = 0.012 * lower * (0.72 + 0.28 * center)
+            delta = 0.020 * lower * (0.72 + 0.28 * center)
             v.co.x -= delta
-            stats["windshield_lower_rearward"] += 1
+            stats["v31_windshield_lower_rearward"] += 1
 
-    # Canonicalized V27 roof/header station.
-    if 0.28 <= x <= 0.58 and 1.70 <= z <= 1.86 and ay <= 0.74:
-        xf = max(0.0, min(1.0, (x - 0.28) / 0.30))
-        edge = min(1.0, ay / 0.74)
-        v.co.z -= 0.008 * xf * (0.82 + 0.18 * edge)
-        stats["header_station"] += 1
-
-    # Retain the small canonical cowl break.
-    if 1.12 <= x <= 1.42 and 1.29 <= z <= 1.40 and ay <= 0.76:
-        fx = 1.0 - min(1.0, abs(x - 1.27) / 0.15)
-        v.co.z -= 0.0035 * fx
-        stats["cowl"] += 1
-
-    # Canonicalized V27 tighter center cowl station, still bounded away from fenders/lamps.
-    if 1.08 <= x <= 1.43 and 1.26 <= z <= 1.41 and ay <= 0.66:
-        xf = 1.0 - min(1.0, abs(x - 1.255) / 0.175)
+    # Stronger center cowl step immediately ahead of the glass, bounded away from fenders.
+    if 1.08 <= x <= 1.46 and 1.23 <= z <= 1.42 and ay <= 0.66:
+        xf = 1.0 - min(1.0, abs(x - 1.27) / 0.19)
         yf = 1.0 - min(1.0, ay / 0.66)
-        v.co.z -= 0.009 * max(0.0, xf) * (0.72 + 0.28 * yf)
-        stats["cowl_break"] += 1
+        v.co.z -= 0.014 * max(0.0, xf) * (0.70 + 0.30 * yf)
+        stats["v31_cowl_break"] += 1
 
     # Scoopless TRD Off-Road hood plateau.
     if 1.18 <= x <= 2.34 and 1.11 <= z <= 1.37 and ay <= 0.58:
@@ -206,4 +210,4 @@ for v in body.data.vertices:
         stats["rear_cab"] += 1
 
 body.data.update()
-print("[TPG TACOMA CANONICAL PHOTO MATCH] V28 single-pass consolidated source-mesh build complete", dict(stats))
+print("[TPG TACOMA CANONICAL PHOTO MATCH] V31 integrated cab-break source-mesh build complete", dict(stats))
