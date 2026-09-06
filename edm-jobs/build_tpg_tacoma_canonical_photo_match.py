@@ -3,22 +3,16 @@ from collections import defaultdict
 
 # Canonical Tacoma photo-match pass.
 # IMPORTANT: This is intentionally ONE source-mesh-derived body pass from FBX_Plane.001.
-# It replaces the old V13->V17 cumulative deformation chain. All body corrections use
-# bounded/absolute target envelopes so they do not compound across releases.
+# It replaces the old cumulative deformation chain. All body corrections are bounded and
+# applied in this single canonical loop so validated changes do not become patch-on-patch.
 # DCS wheel hierarchy, arg 8 wheel roll, arg 9 steering, gameplay tuning, collision,
 # LOD/destroyed structure, materials, registration and official ED exporter are untouched.
 #
-# V26 clay-gate correction, 2026-09-06:
-# V25 broadened the side-window perimeter bands so the sparse FBX topology can actually
-# carry a visible pillar/rail normal break while preserving the proven 55 mm side wells.
-# Apply the same evidence-based correction to the windshield: retain the proven 45 mm well
-# exactly unchanged, but replace its narrow V23 <=50 mm frame test with broader feathered
-# source-skin shoulders around the A-pillar/header/cowl perimeter. No new geometry, no
-# windshield object, no deeper recess, and no front-clip movement outside that perimeter.
-#
-# Exporter safety remains strict: existing source FBX vertices only, bounded millimeter-scale
-# deformation, no new topology/objects, no remesh, and no changes to wheel animation,
-# registration, gameplay tuning, collision, LOD/destroyed structure, packaging or exporter.
+# V28 consolidation, 2026-09-06:
+# V27's bounded windshield/header/cowl stance correction was source-mesh-derived but had
+# accidentally become a second geometry script after this pass. Fold that validated logic
+# into the canonical loop and retire the chained invocation. This is an architecture cleanup,
+# not a new procedural shell: existing FBX_Plane.001 vertices only, no topology/objects/remesh.
 
 body = bpy.data.objects.get("FBX_Plane.001")
 if body is None or body.type != 'MESH':
@@ -70,7 +64,7 @@ for v in body.data.vertices:
             v.co.y -= sign * (0.0045 * strength)
             stats["beltline_upper"] += 1
 
-    # Proven V21 source-FBX side window wells. Keep depth unchanged at 55 mm.
+    # Proven source-FBX side window wells. Keep depth unchanged at 55 mm.
     if 0.555 <= ay <= 0.795 and 1.415 <= z <= 1.695:
         window = None
         if 0.08 <= x <= 0.82:
@@ -87,10 +81,7 @@ for v in body.data.vertices:
                 v.co.y -= sign * (0.055 * strength)
                 stats["side_window_recess"] += 1
 
-    # V25 source-skin glasshouse perimeter bands. The V24 edge test only found two source
-    # vertices, so define wider bands immediately around the established wells. These are
-    # shallow outward shoulders, not separate frames: they simply make the A/B/C pillars,
-    # roof rail and beltline survive smooth clay shading on the sparse FBX topology.
+    # Source-skin glasshouse perimeter bands so pillars/rails survive smooth clay shading.
     if 0.545 <= ay <= 0.805:
         window = None
         if 0.08 <= x <= 0.82:
@@ -100,25 +91,19 @@ for v in body.data.vertices:
         if window is not None:
             x0, x1 = window
             band = 0.0
-
-            # Lower and upper rails: 75-80 mm bands centered just outside the well.
             if 1.365 <= z < 1.415:
                 band = max(band, (z - 1.365) / 0.050)
             elif 1.695 < z <= 1.775:
                 band = max(band, 1.0 - (z - 1.695) / 0.080)
-
-            # Front/rear pillar shoulders: wider than V24 so real source vertices are hit.
             if x0 - 0.085 <= x < x0 and 1.405 <= z <= 1.715:
                 band = max(band, (x - (x0 - 0.085)) / 0.085)
             elif x1 < x <= x1 + 0.085 and 1.405 <= z <= 1.715:
                 band = max(band, 1.0 - (x - x1) / 0.085)
-
             if band > 0.0:
-                # Cap at 10 mm. Enough for a clay normal break, far below the 55 mm well.
                 v.co.y += sign * (0.010 * max(0.0, min(1.0, band)))
                 stats["side_window_perimeter_band"] += 1
 
-    # Proven V21 windshield well. Keep depth unchanged at 45 mm.
+    # Proven windshield well. Keep depth unchanged at 45 mm.
     if 0.56 <= x <= 1.08 and 1.415 <= z <= 1.695 and ay <= 0.59:
         ex = min((x - 0.56) / 0.055, (1.08 - x) / 0.060, 1.0)
         ez = min((z - 1.415) / 0.045, (1.695 - z) / 0.050, 1.0)
@@ -127,39 +112,59 @@ for v in body.data.vertices:
             v.co.x -= 0.045 * strength
             stats["windshield_recess"] += 1
 
-    # V26 source-skin windshield perimeter shoulders. The old V23 <=50 mm edge test used
-    # the same sparse-topology assumption that failed on the side glass. Use broader bands
-    # just outside the established well so real source vertices can define the A-pillars,
-    # header and cowl break in front/front-3Q clay without changing the well itself.
+    # Source-skin windshield perimeter shoulders.
     if ay <= 0.61:
         band = 0.0
-
-        # Rear/header and forward/cowl shoulders in X, immediately outside the well.
         if 0.485 <= x < 0.56 and 1.405 <= z <= 1.715:
             band = max(band, (x - 0.485) / 0.075)
         elif 1.08 < x <= 1.165 and 1.405 <= z <= 1.715:
             band = max(band, 1.0 - (x - 1.08) / 0.085)
-
-        # Lower and upper windshield rails in Z, bounded to the windshield span.
         if 0.55 <= x <= 1.09:
             if 1.350 <= z < 1.415:
                 band = max(band, (z - 1.350) / 0.065)
             elif 1.695 < z <= 1.785:
                 band = max(band, 1.0 - (z - 1.695) / 0.090)
-
         if band > 0.0:
-            # Up to 10 mm forward normal break; no topology or gross silhouette movement.
             v.co.x += 0.010 * max(0.0, min(1.0, band))
             stats["windshield_perimeter_band"] += 1
 
-    # Retain only a very small cowl break.
+    # Canonicalized V27 windshield stance: differential movement makes the glass envelope
+    # more upright without adding a second body pass.
+    if 0.50 <= x <= 1.16 and 1.40 <= z <= 1.76 and ay <= 0.64:
+        zf = max(0.0, min(1.0, (z - 1.40) / 0.36))
+        center = 1.0 - min(1.0, ay / 0.64)
+        if zf >= 0.48:
+            upper = (zf - 0.48) / 0.52
+            delta = 0.025 * upper * (0.72 + 0.28 * center)
+            v.co.x += delta
+            stats["windshield_upper_forward"] += 1
+        else:
+            lower = (0.48 - zf) / 0.48
+            delta = 0.012 * lower * (0.72 + 0.28 * center)
+            v.co.x -= delta
+            stats["windshield_lower_rearward"] += 1
+
+    # Canonicalized V27 roof/header station.
+    if 0.28 <= x <= 0.58 and 1.70 <= z <= 1.86 and ay <= 0.74:
+        xf = max(0.0, min(1.0, (x - 0.28) / 0.30))
+        edge = min(1.0, ay / 0.74)
+        v.co.z -= 0.008 * xf * (0.82 + 0.18 * edge)
+        stats["header_station"] += 1
+
+    # Retain the small canonical cowl break.
     if 1.12 <= x <= 1.42 and 1.29 <= z <= 1.40 and ay <= 0.76:
         fx = 1.0 - min(1.0, abs(x - 1.27) / 0.15)
         v.co.z -= 0.0035 * fx
         stats["cowl"] += 1
 
-    # Scoopless TRD Off-Road hood plateau. Flatten the inner hood while keeping lamp,
-    # grille and wheel-arch corners source-derived.
+    # Canonicalized V27 tighter center cowl station, still bounded away from fenders/lamps.
+    if 1.08 <= x <= 1.43 and 1.26 <= z <= 1.41 and ay <= 0.66:
+        xf = 1.0 - min(1.0, abs(x - 1.255) / 0.175)
+        yf = 1.0 - min(1.0, ay / 0.66)
+        v.co.z -= 0.009 * max(0.0, xf) * (0.72 + 0.28 * yf)
+        stats["cowl_break"] += 1
+
+    # Scoopless TRD Off-Road hood plateau.
     if 1.18 <= x <= 2.34 and 1.11 <= z <= 1.37 and ay <= 0.58:
         tx = min(1.0, max(0.0, (x - 1.18) / 1.16))
         target_z = 1.307 - 0.020 * tx
@@ -167,9 +172,7 @@ for v in body.data.vertices:
         v.co.z += max(-0.016, min(0.010, (target_z - z) * blend))
         stats["hood_plateau"] += 1
 
-    # V24 hood-leading break: flatten only the final 240 mm of the upper hood and create a
-    # modest downward break into the fascia. This is deliberately inside the hood field and
-    # avoids headlamp corners, bumper skin and wheel-arch topology.
+    # Hood-leading break.
     if 2.10 <= x <= 2.34 and 1.18 <= z <= 1.34 and ay <= 0.62:
         fx = min(1.0, max(0.0, (x - 2.10) / 0.24))
         fy = 1.0 - min(1.0, ay / 0.62)
@@ -178,8 +181,7 @@ for v in body.data.vertices:
         v.co.z += max(-0.012, min(0.006, (target_z - z) * 0.42 * weight))
         stats["hood_leading_break"] += 1
 
-    # Define the outer hood/fender shoulder as a narrow band without touching the wheel
-    # arch or headlamp corner topology.
+    # Outer hood/fender shoulder.
     if 1.48 <= x <= 2.20 and 1.12 <= z <= 1.34 and 0.56 <= ay <= 0.80:
         fx = min(1.0, max(0.0, (x - 1.48) / 0.72))
         fy = 1.0 - min(1.0, abs(ay - 0.68) / 0.12)
@@ -190,9 +192,7 @@ for v in body.data.vertices:
         v.co.z += max(-0.010, min(0.006, (target_z - z) * 0.30 * weight))
         stats["front_shoulders"] += 1
 
-    # V24 upper grille standup. Keep the bumper/headlight surfaces source-derived and only
-    # bring the central upper fascia forward a few additional millimeters so the nose reads
-    # more upright beneath the new hood-leading break.
+    # Upper grille standup, preserving bumper/headlight source topology.
     if 2.34 <= x <= 2.54 and 1.03 <= z <= 1.24 and ay <= 0.68:
         zf = min(1.0, max(0.0, (z - 1.03) / 0.21))
         yf = 1.0 - min(1.0, ay / 0.68)
@@ -206,5 +206,4 @@ for v in body.data.vertices:
         stats["rear_cab"] += 1
 
 body.data.update()
-
-print("[TPG TACOMA CANONICAL PHOTO MATCH] V26 broad windshield perimeter pass complete", dict(stats))
+print("[TPG TACOMA CANONICAL PHOTO MATCH] V28 single-pass consolidated source-mesh build complete", dict(stats))
