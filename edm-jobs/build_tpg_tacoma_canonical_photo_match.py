@@ -8,12 +8,11 @@ from collections import defaultdict
 # gameplay tuning, collision, LOD/destroyed structure, materials, registration and the
 # official ED exporter are untouched.
 #
-# V35, 2026-09-06:
-# Fresh V34 side/front/front-3Q/rear-3Q clay was inspected directly. Export/package is green,
-# but visual QA still rejects the truck: the nose is too pinched and domed in front view, with
-# the hood center and fender tops flowing together instead of reading as the broad, flatter
-# 2016 Tacoma hood deck plus distinct outer shoulders. Preserve V34's stronger cab reset and
-# make the next correction in this same canonical source-FBX pass. Existing vertices only.
+# V36, 2026-09-06:
+# V35 is exporter/package green. Keep its broader flatter hood and fender shoulders, then
+# continue the same front-clip correction into the upper fascia so front/front-3Q clay does
+# not collapse back into a narrow pointed nose below the hood. Existing FBX vertices only;
+# preserve headlamp/bumper topology and all proven DCS-side behavior.
 
 body = bpy.data.objects.get("FBX_Plane.001")
 if body is None or body.type != 'MESH':
@@ -226,6 +225,28 @@ for v in body.data.vertices:
         v.co.x += 0.0065 * (0.65 + 0.35 * zf) * (0.72 + 0.28 * yf)
         stats["upper_nose"] += 1
 
+    # V36 front-face breadth: carry the squared V35 hood/fender width down into the upper
+    # fascia. This targets only the outer upper-nose/headlamp shoulder band and uses small,
+    # feathered Y/X offsets so the source bumper and lamp topology remains intact.
+    if 2.26 <= x <= 2.56 and 0.95 <= z <= 1.22 and 0.58 <= ay <= 0.88:
+        fx = min(1.0, max(0.0, (x - 2.26) / 0.30))
+        fy = 1.0 - min(1.0, abs(ay - 0.735) / 0.155)
+        fz = 1.0 - min(1.0, abs(z - 1.085) / 0.135)
+        weight = max(0.0, fy * fz) * (0.45 + 0.55 * fx)
+        v.co.y += sign * (0.016 * weight)
+        v.co.x += 0.0045 * weight
+        stats["v36_upper_fascia_breadth"] += 1
+
+    # V36 hood-to-headlamp corner: keep the hood leading edge from pinching inward where it
+    # meets the outer lamp/fender shoulder, producing the broader Tacoma front-3Q silhouette.
+    if 2.12 <= x <= 2.42 and 1.16 <= z <= 1.31 and 0.62 <= ay <= 0.82:
+        fx = min(1.0, max(0.0, (x - 2.12) / 0.30))
+        fy = 1.0 - min(1.0, abs(ay - 0.72) / 0.10)
+        weight = max(0.0, fx * fy)
+        v.co.y += sign * (0.010 * weight)
+        v.co.z += max(-0.006, min(0.004, (1.278 - z) * 0.28 * weight))
+        stats["v36_hood_lamp_corner"] += 1
+
     # Keep the DCLB rear cab station square without touching rear-window/pillar topology.
     if -1.20 <= x <= -1.00 and 1.47 <= z <= 1.72 and ay <= 0.74:
         target_x = -1.11 - 0.006 * min(1.0, max(0.0, (z - 1.47) / 0.25))
@@ -233,4 +254,4 @@ for v in body.data.vertices:
         stats["rear_cab"] += 1
 
 body.data.update()
-print("[TPG TACOMA CANONICAL PHOTO MATCH] V35 hood/front-fender source-FBX correction complete", dict(stats))
+print("[TPG TACOMA CANONICAL PHOTO MATCH] V36 front-fascia breadth source-FBX correction complete", dict(stats))
