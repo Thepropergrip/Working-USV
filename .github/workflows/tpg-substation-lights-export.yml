@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   export-substation-lights:
-    runs-on: windows-latest
+    runs-on: windows-2022
     timeout-minutes: 75
     strategy:
       fail-fast: false
@@ -129,7 +129,7 @@ jobs:
 
   package-substation-lights:
     needs: export-substation-lights
-    runs-on: windows-latest
+    runs-on: windows-2022
     timeout-minutes: 15
     steps:
       - name: Checkout
