@@ -8,16 +8,14 @@ from collections import defaultdict
 # DCS wheel hierarchy, arg 8 wheel roll, arg 9 steering, gameplay tuning, collision,
 # LOD/destroyed structure, materials, registration and official ED exporter are untouched.
 #
-# Visual-QA correction, 2026-09-06:
-# Preserve the original FBX greenhouse/window topology and work only on narrow silhouette
-# bands. The V18 clay set exported cleanly, but side/front-3Q still showed two hero-body
-# problems: the upper A-pillar/windshield transition remained too swept and continuous with
-# the roof, and the hood/fender top read as one inflated dome instead of the flatter Tacoma
-# hood plateau with a defined outer shoulder. V19 corrects those cues with bounded source-
-# mesh edits only; no generated geometry and no wheel/export/gameplay changes.
+# V20 clay-gate correction, 2026-09-06:
+# V18/V19 exported cleanly, but the required side/front/front-3Q clay views still showed
+# the upper cab as a continuous featureless shell. Preserve the source FBX silhouette and
+# form shallow window/windshield wells DIRECTLY in FBX_Plane.001. No procedural replacement
+# body panels are added. A/B/C pillars, roof header and beltline borders remain untouched.
+# This is still a single clean source-mesh pass, not a cumulative patch chain.
 #
-# Exporter safety: this stage stays source-mesh-only. The exporter-proven generated topper
-# is retained until any replacement topper has independently passed the ED EDM exporter.
+# Exporter safety: source-mesh vertices only. The exporter-proven generated topper remains.
 
 body = bpy.data.objects.get("FBX_Plane.001")
 if body is None or body.type != 'MESH':
@@ -39,7 +37,7 @@ for v in body.data.vertices:
         v.co.y += (sign * target_ay - y) * 0.30
         stats["roof_shoulders"] += 1
 
-    # V18: defined leading roof/header break, retained for V19.
+    # Leading roof/header break retained from V18.
     if 0.30 <= x <= 0.56 and 1.73 <= z <= 1.86 and ay <= 0.73:
         fx = min(1.0, max(0.0, (x - 0.30) / 0.26))
         target_z = 1.812 - 0.006 * fx
@@ -47,21 +45,18 @@ for v in body.data.vertices:
         v.co.x -= 0.0045 * fx
         stats["roof_header_break"] += 1
 
-    # V19: stand only the OUTER upper A-pillar rail slightly more upright. The center
-    # windshield field is deliberately untouched. Moving the upper rail forward by a
-    # maximum 18 mm gives side/front-3Q a distinct roof-to-A-pillar corner without the
-    # broad greenhouse deformation that previously erased window/pillar character.
+    # Stand only the OUTER upper A-pillar rail slightly more upright. The center windshield
+    # field is left for the dedicated shallow recess below.
     if 0.52 <= x <= 0.98 and 1.52 <= z <= 1.76 and 0.50 <= ay <= 0.76:
         zf = min(1.0, max(0.0, (z - 1.52) / 0.24))
         xf = 1.0 - min(1.0, abs(x - 0.75) / 0.23)
         delta_x = 0.018 * zf * xf
         v.co.x += delta_x
-        # Slightly square the outer rail so the upper cab does not pinch inward.
         v.co.y += sign * (0.0045 * zf * xf)
         stats["upper_a_pillar"] += 1
 
-    # V18 beltline shoulder retained. Paired small offsets create a readable body shoulder
-    # without moving the actual window/pillar topology as a block.
+    # Beltline shoulder retained. Paired small offsets define the door-top shoulder while
+    # leaving the window wells and actual pillar borders local and independent.
     if -1.05 <= x <= 0.92 and 0.48 <= ay <= 0.79:
         if 1.285 <= z <= 1.345:
             strength = 1.0 - min(1.0, abs(z - 1.315) / 0.030)
@@ -72,16 +67,43 @@ for v in body.data.vertices:
             v.co.y -= sign * (0.0045 * strength)
             stats["beltline_upper"] += 1
 
-    # Retain only a very small cowl break. The source windshield center stays untouched.
+    # V20 side glass relief: two shallow source-mesh wells per side, split by a preserved
+    # B-pillar. Borders remain around the A/C pillars, roof and beltline. Feathering avoids
+    # a simple procedural rectangle. Maximum depth is 30 mm so the openings read in clay.
+    if 0.555 <= ay <= 0.795 and 1.415 <= z <= 1.695:
+        window = None
+        if 0.08 <= x <= 0.82:
+            window = (0.08, 0.82)
+        elif -0.92 <= x <= -0.17:
+            window = (-0.92, -0.17)
+        if window is not None:
+            x0, x1 = window
+            ex = min((x - x0) / 0.085, (x1 - x) / 0.085, 1.0)
+            ez = min((z - 1.415) / 0.060, (1.695 - z) / 0.070, 1.0)
+            ey = min((ay - 0.555) / 0.050, (0.795 - ay) / 0.050, 1.0)
+            strength = max(0.0, min(ex, ez, ey))
+            if strength > 0.0:
+                v.co.y -= sign * (0.030 * strength)
+                stats["side_window_recess"] += 1
+
+    # V20 windshield relief: central windshield field only. Recess rearward 26 mm maximum,
+    # retaining the source A-pillars, header and cowl perimeter as the visible frame.
+    if 0.56 <= x <= 1.08 and 1.415 <= z <= 1.695 and ay <= 0.59:
+        ex = min((x - 0.56) / 0.075, (1.08 - x) / 0.080, 1.0)
+        ez = min((z - 1.415) / 0.060, (1.695 - z) / 0.070, 1.0)
+        strength = max(0.0, min(ex, ez))
+        if strength > 0.0:
+            v.co.x -= 0.026 * strength
+            stats["windshield_recess"] += 1
+
+    # Retain only a very small cowl break.
     if 1.12 <= x <= 1.42 and 1.29 <= z <= 1.40 and ay <= 0.76:
         fx = 1.0 - min(1.0, abs(x - 1.27) / 0.15)
         v.co.z -= 0.0035 * fx
         stats["cowl"] += 1
 
-    # V19 scoopless TRD Off-Road hood plateau. Flatten the inner hood more decisively than
-    # V18 while keeping lamp, grille and wheel-arch corners source-derived. The target is
-    # nearly level near the cowl and gently falls toward the nose, matching the 2016 Tacoma
-    # hood silhouette instead of the current inflated dome.
+    # Scoopless TRD Off-Road hood plateau. Flatten the inner hood while keeping lamp,
+    # grille and wheel-arch corners source-derived.
     if 1.18 <= x <= 2.34 and 1.11 <= z <= 1.37 and ay <= 0.58:
         tx = min(1.0, max(0.0, (x - 1.18) / 1.16))
         target_z = 1.307 - 0.020 * tx
@@ -89,9 +111,8 @@ for v in body.data.vertices:
         v.co.z += max(-0.016, min(0.010, (target_z - z) * blend))
         stats["hood_plateau"] += 1
 
-    # V19: define the Tacoma outer hood/fender shoulder as a narrow band. A small outward
-    # set plus a slight vertical flattening makes a visible crease/plateau boundary in clay
-    # without touching the wheel arch or headlamp corner topology.
+    # Define the outer hood/fender shoulder as a narrow band without touching the wheel
+    # arch or headlamp corner topology.
     if 1.48 <= x <= 2.20 and 1.12 <= z <= 1.34 and 0.56 <= ay <= 0.80:
         fx = min(1.0, max(0.0, (x - 1.48) / 0.72))
         fy = 1.0 - min(1.0, abs(ay - 0.68) / 0.12)
@@ -114,4 +135,4 @@ for v in body.data.vertices:
         stats["rear_cab"] += 1
 
 body.data.update()
-print("[TPG TACOMA CANONICAL PHOTO MATCH] V19 A-pillar/hood-plateau silhouette pass complete", dict(stats))
+print("[TPG TACOMA CANONICAL PHOTO MATCH] V20 source-window relief pass complete", dict(stats))
