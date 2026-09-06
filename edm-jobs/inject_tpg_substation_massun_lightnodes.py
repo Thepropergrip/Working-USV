@@ -20,6 +20,8 @@ from pathlib import Path
 #   Theta = 0.75
 #   Distance = 160.0
 #   LightNode __VERSION__ = 1
+#
+# Build retrigger marker 2026-09-06: no runtime behavior change.
 
 CONNECTOR_PREFIX = "TPG_YARD_FLOOD_"
 COUNT = 9
