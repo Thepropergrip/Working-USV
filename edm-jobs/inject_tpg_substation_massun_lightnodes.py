@@ -12,21 +12,21 @@ from pathlib import Path
 # the Mission Editor preview selected this asset. Keep the proven donor-compatible
 # static Property<float> Brightness instead.
 #
-# Current tuning:
+# User-approved intensity/cone tuning after in-game testing:
 #   isSpot = 1
 #   Color = (1.0, 0.9, 0.9)
-#   Brightness = 0.55
-#   Phi = 1.0
-#   Theta = 0.5
+#   Brightness = 1.65
+#   Phi = 1.25
+#   Theta = 0.75
 #   Distance = 160.0
 #   LightNode __VERSION__ = 1
 
 CONNECTOR_PREFIX = "TPG_YARD_FLOOD_"
 COUNT = 9
 DONOR_COLOR = (1.0, 0.9, 0.9)
-SUBSTATION_BRIGHTNESS = 0.55
-DONOR_PHI = 1.0
-DONOR_THETA = 0.5
+SUBSTATION_BRIGHTNESS = 1.65
+DONOR_PHI = 1.25
+DONOR_THETA = 0.75
 SUBSTATION_DISTANCE = 160.0
 
 
@@ -204,7 +204,7 @@ def inject(path):
     group = bytearray(struct.pack("<II", strings.index("LIGHT_NODES"), COUNT))
     for idx, connector_name, parent_data in connectors:
         group += light_node(strings, f"TPG_MASSUN_FLOOD_{idx:02d}", parent_data)
-        print(f"Inject light {idx}: connector={connector_name} parentData={parent_data} brightness={SUBSTATION_BRIGHTNESS} distance={SUBSTATION_DISTANCE}")
+        print(f"Inject light {idx}: connector={connector_name} parentData={parent_data} brightness={SUBSTATION_BRIGHTNESS} phi={DONOR_PHI} theta={DONOR_THETA} distance={SUBSTATION_DISTANCE}")
     body += group
 
     string_blob = encode_strings(strings)
@@ -213,10 +213,12 @@ def inject(path):
         raise RuntimeError("Injected light names failed validation")
     if b"model::LightNode" not in rebuilt or b"LIGHT_NODES" not in rebuilt:
         raise RuntimeError("Injected LightNode strings missing")
+    if b"model::AnimatedProperty<float>" in rebuilt:
+        raise RuntimeError("Unsafe animated LightNode property unexpectedly present")
 
     path.write_bytes(rebuilt)
     print(f"Injected {COUNT} crash-safe static legacy LightNode v1 spotlights into {path.name}")
-    print(f"Brightness={SUBSTATION_BRIGHTNESS}; distance={SUBSTATION_DISTANCE} m")
+    print(f"Brightness={SUBSTATION_BRIGHTNESS}; phi={DONOR_PHI}; theta={DONOR_THETA}; distance={SUBSTATION_DISTANCE} m")
     print(f"EDM size: {len(data)} -> {len(rebuilt)} bytes; render-item groups {old_group_count} -> {old_group_count + 1}")
 
 
