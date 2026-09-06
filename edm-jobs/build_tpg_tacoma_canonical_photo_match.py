@@ -8,12 +8,13 @@ from collections import defaultdict
 # DCS wheel hierarchy, arg 8 wheel roll, arg 9 steering, gameplay tuning, collision,
 # LOD/destroyed structure, materials, registration and official ED exporter are untouched.
 #
-# V20 clay-gate correction, 2026-09-06:
-# V18/V19 exported cleanly, but the required side/front/front-3Q clay views still showed
-# the upper cab as a continuous featureless shell. Preserve the source FBX silhouette and
-# form shallow window/windshield wells DIRECTLY in FBX_Plane.001. No procedural replacement
-# body panels are added. A/B/C pillars, roof header and beltline borders remain untouched.
-# This is still a single clean source-mesh pass, not a cumulative patch chain.
+# V21 clay-gate correction, 2026-09-06:
+# V20 proved that the source FBX window/windshield selections are valid (62 side-window
+# and 69 windshield vertices were edited), but the 30/26 mm wells disappeared visually
+# under the source smoothing in side/front-3Q clay QA. Keep the same original-FBX topology,
+# pillar/header/beltline keep-outs and single-pass strategy, but make those wells deeper
+# and their feather bands tighter so the glasshouse reads structurally at DCS viewing
+# distance. No procedural replacement body panels are added.
 #
 # Exporter safety: source-mesh vertices only. The exporter-proven generated topper remains.
 
@@ -46,7 +47,7 @@ for v in body.data.vertices:
         stats["roof_header_break"] += 1
 
     # Stand only the OUTER upper A-pillar rail slightly more upright. The center windshield
-    # field is left for the dedicated shallow recess below.
+    # field is left for the dedicated recess below.
     if 0.52 <= x <= 0.98 and 1.52 <= z <= 1.76 and 0.50 <= ay <= 0.76:
         zf = min(1.0, max(0.0, (z - 1.52) / 0.24))
         xf = 1.0 - min(1.0, abs(x - 0.75) / 0.23)
@@ -67,9 +68,10 @@ for v in body.data.vertices:
             v.co.y -= sign * (0.0045 * strength)
             stats["beltline_upper"] += 1
 
-    # V20 side glass relief: two shallow source-mesh wells per side, split by a preserved
-    # B-pillar. Borders remain around the A/C pillars, roof and beltline. Feathering avoids
-    # a simple procedural rectangle. Maximum depth is 30 mm so the openings read in clay.
+    # V21 side glass relief: retain the same two original-FBX window fields and the
+    # preserved B-pillar, but deepen the interior to 55 mm and tighten the feather to
+    # leave a crisp geometric perimeter that survives clay smoothing. This is deformation
+    # of the source body surface itself, not a generated window/body overlay.
     if 0.555 <= ay <= 0.795 and 1.415 <= z <= 1.695:
         window = None
         if 0.08 <= x <= 0.82:
@@ -78,22 +80,23 @@ for v in body.data.vertices:
             window = (-0.92, -0.17)
         if window is not None:
             x0, x1 = window
-            ex = min((x - x0) / 0.085, (x1 - x) / 0.085, 1.0)
-            ez = min((z - 1.415) / 0.060, (1.695 - z) / 0.070, 1.0)
-            ey = min((ay - 0.555) / 0.050, (0.795 - ay) / 0.050, 1.0)
+            ex = min((x - x0) / 0.060, (x1 - x) / 0.060, 1.0)
+            ez = min((z - 1.415) / 0.045, (1.695 - z) / 0.050, 1.0)
+            ey = min((ay - 0.555) / 0.040, (0.795 - ay) / 0.040, 1.0)
             strength = max(0.0, min(ex, ez, ey))
             if strength > 0.0:
-                v.co.y -= sign * (0.030 * strength)
+                v.co.y -= sign * (0.055 * strength)
                 stats["side_window_recess"] += 1
 
-    # V20 windshield relief: central windshield field only. Recess rearward 26 mm maximum,
-    # retaining the source A-pillars, header and cowl perimeter as the visible frame.
+    # V21 windshield relief: same central source-FBX field and untouched A-pillars/header/
+    # cowl perimeter, now 45 mm rearward with a tighter feather so the windshield plane
+    # and its frame are visible in front and front-3Q clay without changing the front clip.
     if 0.56 <= x <= 1.08 and 1.415 <= z <= 1.695 and ay <= 0.59:
-        ex = min((x - 0.56) / 0.075, (1.08 - x) / 0.080, 1.0)
-        ez = min((z - 1.415) / 0.060, (1.695 - z) / 0.070, 1.0)
+        ex = min((x - 0.56) / 0.055, (1.08 - x) / 0.060, 1.0)
+        ez = min((z - 1.415) / 0.045, (1.695 - z) / 0.050, 1.0)
         strength = max(0.0, min(ex, ez))
         if strength > 0.0:
-            v.co.x -= 0.026 * strength
+            v.co.x -= 0.045 * strength
             stats["windshield_recess"] += 1
 
     # Retain only a very small cowl break.
@@ -135,4 +138,4 @@ for v in body.data.vertices:
         stats["rear_cab"] += 1
 
 body.data.update()
-print("[TPG TACOMA CANONICAL PHOTO MATCH] V20 source-window relief pass complete", dict(stats))
+print("[TPG TACOMA CANONICAL PHOTO MATCH] V21 sharper source-glasshouse relief complete", dict(stats))
