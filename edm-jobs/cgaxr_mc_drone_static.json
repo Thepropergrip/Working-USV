@@ -1,0 +1,6 @@
+{
+  "mode": "script",
+  "script": "edm-jobs/build_cgaxr_mc_drone.py",
+  "output": "CGAXR_MC_Drone.edm",
+  "save_blend": true
+}
