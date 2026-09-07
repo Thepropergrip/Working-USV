@@ -1,0 +1,1 @@
+CGAXR MC Drone build assets for the isolated cgaxr-mc-drone-static branch. The Windows workflow reconstructs the original high-density mesh, translates source V-Ray materials to ED EDM materials, exports CGAXR_MC_Drone.edm, and packages a Saved Games/DCS/Mods/tech drop-in folder.
