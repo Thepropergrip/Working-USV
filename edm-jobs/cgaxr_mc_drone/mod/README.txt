@@ -1,0 +1,1 @@
+Install by placing the TPG_CGAXR_MC_Drone_Static folder directly in Saved Games\DCS\Mods\tech\. In Mission Editor, place it as Static Object -> Helicopters -> TPG CGAXR MC Drone.
