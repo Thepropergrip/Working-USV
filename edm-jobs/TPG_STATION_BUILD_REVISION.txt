@@ -1,0 +1,5 @@
+TPG Fuel and Luuuube build revision 1.0.0
+2 double-sided pumps / 4 fueling positions
+Regular 87 starts at $3.95 per gallon
+LOD0 + LOD1 + LOD2 + destroyed EDM
+PR2 validation trigger

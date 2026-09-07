@@ -1,0 +1,6 @@
+{
+  "mode": "script",
+  "script": "edm-jobs/build_tpg_station_intact.py",
+  "output": "TPG_Gas_Station_V1_2_Liveries.edm",
+  "save_blend": true
+}
