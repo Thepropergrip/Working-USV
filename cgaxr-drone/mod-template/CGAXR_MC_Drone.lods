@@ -1,0 +1,5 @@
+model = {
+    lods = {
+        {"CGAXR_MC_Drone.edm", 2500.0};
+    };
+}
