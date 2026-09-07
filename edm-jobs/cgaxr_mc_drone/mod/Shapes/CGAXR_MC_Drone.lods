@@ -1,0 +1,5 @@
+model = {
+    lods = {
+        { file = "CGAXR_MC_Drone.edm", distance = 1000000.0 },
+    },
+}
