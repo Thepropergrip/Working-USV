@@ -1,0 +1,6 @@
+{
+  "mode": "script",
+  "script": "edm-jobs/build_container_10ft_lite.py",
+  "output": "TPG_10FT_CONTAINER_OPEN_LITE.edm",
+  "save_blend": true
+}
