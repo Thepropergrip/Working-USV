@@ -1,6 +1,6 @@
 {
   "mode": "script",
-  "script": "edm-jobs/build_grizzly_rc4.py",
-  "output": "TPG_GRIZZLY_HELLFIRE.edm",
+  "script": "edm-jobs/tpg_viking_windmill_build.py",
+  "output": "TPG_VIKING_FARM_WINDMILL.edm",
   "save_blend": true
 }
