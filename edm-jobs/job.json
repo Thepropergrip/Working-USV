@@ -1,6 +1,6 @@
 {
   "mode": "script",
-  "script": "edm-jobs/build_grizzly_alarm_lift.py",
-  "output": "TPG_GRIZZLY_SHORAD_D_JAGM_KIN_4P5S_CRATE35_CA.edm",
+  "script": "edm-jobs/build_nato_shelter.py",
+  "output": "TPG_NATO_Shelter.edm",
   "save_blend": true
 }
