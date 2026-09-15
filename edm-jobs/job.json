@@ -1,6 +1,1 @@
-{
-  "mode": "script",
-  "script": "edm-jobs/build_nato_shelter.py",
-  "output": "TPG_NATO_Shelter.edm",
-  "save_blend": true
-}
+{"mode":"script","script":"edm-jobs/acquire_shelter_tools.py","output":"TOOLING_SELFTEST_NOT_SHELTER.edm","save_blend":false}
