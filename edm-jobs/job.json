@@ -1,6 +1,6 @@
 {
   "mode": "script",
-  "script": "edm-jobs/build_grizzly_rc4.py",
-  "output": "TPG_GRIZZLY_HELLFIRE.edm",
-  "save_blend": true
+  "script": "edm-jobs/inspect_grizzly_rc4.py",
+  "output": "GRIZZLY_SOURCE_INSPECTION.edm",
+  "save_blend": false
 }
