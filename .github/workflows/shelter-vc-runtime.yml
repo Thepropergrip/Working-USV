@@ -1,0 +1,30 @@
+name: Shelter native C++ runtime
+on:
+  push:
+    paths: [".github/workflows/shelter-vc-runtime.yml"]
+permissions:
+  contents: read
+jobs:
+  runtime:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - name: Stage Microsoft Visual C++ runtime DLLs
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -Type Directory out | Out-Null
+          $names = @('msvcp140.dll','msvcp140_1.dll','msvcp140_2.dll','msvcp140_atomic_wait.dll','msvcp140_codecvt_ids.dll','vcruntime140.dll','vcruntime140_1.dll','concrt140.dll')
+          $manifest = @()
+          foreach ($name in $names) {
+            $p = Join-Path $env:WINDIR "System32\$name"
+            if (-not (Test-Path $p)) { throw "Missing runtime $name" }
+            Copy-Item $p "out\$name"
+            $manifest += @{name=$name; version=(Get-Item $p).VersionInfo.FileVersion; sha256=(Get-FileHash $p -Algorithm SHA256).Hash}
+          }
+          $manifest | ConvertTo-Json | Set-Content out\manifest.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shelter-msvc-runtime
+          path: out/**
+          retention-days: 7
