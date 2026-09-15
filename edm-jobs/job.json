@@ -1,7 +1,7 @@
 {
   "mode": "script",
   "script": "edm-jobs/build_grizzly_alarm_lift.py",
-  "post_script": "edm-jobs/grizzly_visual_final.py",
+  "post_script": "edm-jobs/grizzly_surface_clearance.py",
   "output": "TPG_GRIZZLY_SHORAD_D_JAGM_KIN_4P5S_CRATE35_CA.edm",
   "save_blend": true
 }
