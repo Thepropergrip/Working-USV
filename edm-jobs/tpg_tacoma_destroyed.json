@@ -1,0 +1,6 @@
+{
+  "mode": "script",
+  "script": "edm-jobs/build_tpg_tacoma_destroyed.py",
+  "output": "TPG_Tacoma_Recon_Destroyed.edm",
+  "save_blend": false
+}

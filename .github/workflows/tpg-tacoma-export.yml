@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - tpg-tacoma-recon
+      - tpg-tacoma-recon-build
     paths:
       - ".github/workflows/tpg-tacoma-export.yml"
       - "edm-jobs/build_tpg_tacoma.py"
