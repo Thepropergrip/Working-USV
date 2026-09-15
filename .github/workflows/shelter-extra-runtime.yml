@@ -1,0 +1,37 @@
+name: Shelter extra runtime dependencies
+on:
+  push:
+    paths: [".github/workflows/shelter-extra-runtime.yml"]
+permissions:
+  contents: read
+jobs:
+  dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fetch public Debian dependencies
+        run: |
+          mkdir out
+          python3 - <<'PY'
+          import urllib.request,lzma,pathlib,hashlib,json
+          base='https://deb.debian.org/debian/'
+          text=lzma.decompress(urllib.request.urlopen(base+'dists/trixie/main/binary-amd64/Packages.xz',timeout=60).read()).decode()
+          wanted={'libz-mingw-w64','libgphoto2-6t64','libgphoto2-port12t64','libxkbregistry0','libpcsclite1','ocl-icd-libopencl1','libavcodec61','libavformat61','libavutil59','libswresample5'}
+          manifest=[]
+          for b in text.split('\n\n'):
+              d=dict(l.split(': ',1) for l in b.splitlines() if ': ' in l and not l.startswith(' '))
+              if d.get('Package') in wanted:
+                  data=urllib.request.urlopen(base+d['Filename'],timeout=60).read()
+                  assert hashlib.sha256(data).hexdigest()==d['SHA256']
+                  path=pathlib.Path('out')/pathlib.Path(d['Filename']).name;path.write_bytes(data)
+                  manifest.append(d)
+                  print(path,len(data),flush=True)
+          pathlib.Path('out/manifest.json').write_text(json.dumps(manifest,indent=2))
+          assert 'libz-mingw-w64' in {x['Package'] for x in manifest}
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shelter-extra-runtime
+          path: out/**
+          compression-level: 0
+          retention-days: 7
