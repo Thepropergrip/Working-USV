@@ -1,6 +1,6 @@
 {
   "mode": "script",
-  "script": "edm-jobs/inspect_grizzly_rc4.py",
-  "output": "GRIZZLY_SOURCE_INSPECTION.edm",
-  "save_blend": false
+  "script": "edm-jobs/build_grizzly_alarm_lift.py",
+  "output": "TPG_GRIZZLY_SHORAD_D_JAGM_KIN_4P5S_CRATE35_CA.edm",
+  "save_blend": true
 }
