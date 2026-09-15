@@ -10,24 +10,26 @@ SRC_DIR = ROOT / 'cctv-build' / 'source'
 TMP_DIR = ROOT / 'cctv-build' / '_runtime'
 TMP_DIR.mkdir(parents=True, exist_ok=True)
 
-# Reconstruct the user-supplied binary FBX from repository-safe base64 chunks.
+# Reconstruct the creator's dedicated low-poly OBJ from repository-safe chunks.
 b64 = ''.join(p.read_text(encoding='ascii').strip() for p in sorted(SRC_DIR.glob('part_*.b64')))
 if not b64:
-    raise RuntimeError('No CCTV FBX source chunks found')
-fbx_bytes = lzma.decompress(base64.b64decode(b64))
-fbx_path = TMP_DIR / 'cctv_high.fbx'
-fbx_path.write_bytes(fbx_bytes)
-print(f'[CCTV] Reconstructed FBX: {len(fbx_bytes):,} bytes')
+    raise RuntimeError('No CCTV OBJ source chunks found')
+obj_bytes = lzma.decompress(base64.b64decode(b64))
+obj_path = TMP_DIR / 'cctv.obj'
+obj_path.write_bytes(obj_bytes)
+mtl_path = TMP_DIR / 'cctv.mtl'
+mtl_path.write_text('''# TPG CCTV source material names\nnewmtl Map_One\nKd 0.8 0.8 0.8\nnewmtl Map_Two\nKd 0.8 0.8 0.8\n''', encoding='utf-8')
+print(f'[CCTV] Reconstructed low-poly OBJ: {len(obj_bytes):,} bytes')
 
-# Import faithfully from the source FBX.
-bpy.ops.import_scene.fbx(filepath=str(fbx_path))
+# Import faithfully from the source OBJ. Blender 4.x uses the native WM importer.
+bpy.ops.wm.obj_import(filepath=str(obj_path))
 mesh_objs = [o for o in bpy.context.scene.objects if o.type == 'MESH']
 if not mesh_objs:
-    raise RuntimeError('FBX import produced no mesh objects')
+    raise RuntimeError('OBJ import produced no mesh objects')
 print(f'[CCTV] Imported meshes: {len(mesh_objs)}')
 print('[CCTV] Imported materials:', [m.name for m in bpy.data.materials])
 
-# Bake every mesh into world space before rescaling/grounding so FBX hierarchy
+# Bake every mesh into world space before rescaling/grounding so source hierarchy
 # and object transforms cannot change the final DCS placement.
 for obj in mesh_objs:
     if obj.data.users > 1:
@@ -58,7 +60,7 @@ mn, mx = bounds(mesh_objs)
 ext = mx - mn
 print(f'[CCTV] Imported bounds min={tuple(round(x,4) for x in mn)} max={tuple(round(x,4) for x in mx)} ext={tuple(round(x,4) for x in ext)}')
 
-# CCTV poles are vertically dominant. Blender's FBX importer normally resolves
+# CCTV poles are vertically dominant. Blender's OBJ importer normally resolves
 # axis conversion itself; this fallback only fires if the dominant source axis
 # clearly is not Z.
 if ext.z < max(ext.x, ext.y) * 0.70:
@@ -151,8 +153,8 @@ for idx, mat in enumerate(materials):
     attach(f'{texset}_Normal.png', 'Normal (Non-Color)', True)
     print(f'[CCTV] Material {mat.name!r} -> {texset}')
 
-# Triangulate the render geometry non-destructively at mesh-data level for a
-# deterministic game mesh while retaining original normals/UVs/material slots.
+# Triangulate the render geometry deterministically while retaining the source
+# normals, UVs and material assignments.
 for obj in mesh_objs:
     bpy.context.view_layer.objects.active = obj
     obj.select_set(True)
@@ -179,13 +181,11 @@ def make_collision_cylinder(name, radius, depth, z):
     o.EDMProps.SPECIAL_TYPE = 'COLLISION_SHELL'
     return o
 
-# Pole diameter deliberately modest; top box covers camera/control hardware.
 make_collision_cylinder('TPG_CCTV_COLLISION_POLE', 0.18, 5.35, 2.675)
 upper_w = max(0.8, min(2.4, (mx2.x - mn2.x) * 0.95))
 upper_d = max(0.8, min(2.4, (mx2.y - mn2.y) * 0.95))
 make_collision_box('TPG_CCTV_COLLISION_HEAD', (upper_w, upper_d, 0.75), (0,0,5.55))
 
-# Stable names improve debugging in ModelViewer/DCS logs.
 for i, obj in enumerate(mesh_objs, 1):
     obj.name = f'TPG_CCTV_VIS_{i:03d}'
 
