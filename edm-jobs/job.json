@@ -1,6 +1,6 @@
 {
   "mode": "script",
-  "script": "cctv-build/build_cctv_verified.py",
+  "script": "cctv-build/build_cctv_v11.py",
   "output": "TPG_CCTV_Pole.edm",
   "save_blend": true
 }
