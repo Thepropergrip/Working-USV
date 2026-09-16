@@ -1,13 +1,18 @@
 """Re-use the proven native-material build, then apply approved proportions."""
-import hashlib,json,os,runpy
+import hashlib,json,os,runpy,subprocess
 from pathlib import Path
 import bpy
 import numpy as np
 ROOT=Path(os.environ.get('GITHUB_WORKSPACE',os.getcwd())).resolve()
 source=ROOT/'cctv-build/build_cctv_verified.py'
-b=source.read_bytes()
-assert hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()=='82ae1ddd110fad90238c25d501efb3eb531af2ab','Unexpected baseline build revision'
-ns=runpy.run_path(str(source),run_name='tpg_cctv_baseline')
+# Verify the canonical Git blob, not platform-dependent checkout line endings.
+b=subprocess.check_output(['git','cat-file','blob','HEAD:cctv-build/build_cctv_verified.py'],cwd=str(ROOT),timeout=15)
+blob_sha=hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()
+assert blob_sha=='82ae1ddd110fad90238c25d501efb3eb531af2ab',('Unexpected baseline build revision',blob_sha)
+assert source.read_bytes().replace(b'\r\n',b'\n')==b.replace(b'\r\n',b'\n'),'Checkout content differs from verified Git source'
+print('[CCTV V1.1] Baseline Git blob verified: '+blob_sha,flush=True)
+ns={'__name__':'tpg_cctv_baseline','__file__':str(source)}
+exec(compile(b,str(source),'exec'),ns)
 resize_ns=runpy.run_path(str(ROOT/'cctv-build/resize_geometry_v11.py'),run_name='tpg_cctv_resize')
 hi=ns['hi'];mesh=hi.data
 mesh.calc_loop_triangles()
