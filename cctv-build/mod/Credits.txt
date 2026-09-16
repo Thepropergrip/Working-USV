@@ -1,0 +1,25 @@
+TPG CCTV Pole - Credits
+=======================
+
+Original 3D model and included source textures:
+omar-mohamed00 on CGTrader
+
+Original asset title:
+CCTV Street Pole - Game Ready - PBR Textured - Lowpoly
+
+Source listing:
+https://www.cgtrader.com/free-3d-models/exterior/street-exterior/cctv-street-pole-game-ready-pbr-textured-lowpoly
+
+Creator profile:
+https://www.cgtrader.com/designers/omar-mohamed00
+
+DCS adaptation project:
+TPG / Thepropergrip
+
+The original model and source textures are credited to their original creator,
+not to TPG. The source listing identifies its license as:
+Royalty Free License (no AI).
+
+The original assets remain subject to their applicable CGTrader license.
+This credit notice does not replace that license or grant additional rights.
+Please preserve this attribution with the DCS adaptation.
