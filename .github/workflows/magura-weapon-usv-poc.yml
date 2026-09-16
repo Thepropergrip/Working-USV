@@ -1,0 +1,74 @@
+name: MAGURA Weapon-USV POC Package
+
+on:
+  push:
+    branches:
+      - magura-weapon-usv-poc
+    paths:
+      - "experiments/TPG_MAGURA_WEAPON_USV_POC/**"
+      - ".github/workflows/magura-weapon-usv-poc.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "experiments/TPG_MAGURA_WEAPON_USV_POC/**"
+      - ".github/workflows/magura-weapon-usv-poc.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate POC layout
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $root = "experiments/TPG_MAGURA_WEAPON_USV_POC"
+          $required = @(
+            "$root/entry.lua",
+            "$root/Database/TPG_MAGURA_WEAPON_USV_POC.lua",
+            "$root/Database/TPG_MAGURA_WEAPON_USV_POC_LAUNCHER.lua",
+            "$root/README.md"
+          )
+          foreach ($p in $required) {
+            if (-not (Test-Path $p)) { throw "Missing required file: $p" }
+            if ((Get-Item $p).Length -le 0) { throw "Empty required file: $p" }
+          }
+
+          $weapon = Get-Content "$root/Database/TPG_MAGURA_WEAPON_USV_POC.lua" -Raw
+          if ($weapon -notmatch 'declare_weapon') { throw "Weapon declaration missing." }
+          if ($weapon -notmatch 'MAGURA_W6_SeaDragon_R73') { throw "Expected MAGURA shape reference missing." }
+          if ($weapon -notmatch 'v_min\s*=\s*10') { throw "Low-speed experiment v_min missing." }
+
+          $launcher = Get-Content "$root/Database/TPG_MAGURA_WEAPON_USV_POC_LAUNCHER.lua" -Raw
+          if ($launcher -notmatch 'POINT_R73_L') { throw "Expected known MAGURA launch connector missing." }
+          if ($launcher -notmatch 'add_surface_unit') { throw "Launcher registration missing." }
+
+      - name: Build drop-in test ZIP
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $stage = Join-Path $env:RUNNER_TEMP "magura-usv-stage"
+          $out = Join-Path $env:GITHUB_WORKSPACE "artifacts"
+          New-Item -ItemType Directory -Force -Path $stage,$out | Out-Null
+
+          Copy-Item -Recurse -Force "experiments/TPG_MAGURA_WEAPON_USV_POC" (Join-Path $stage "TPG_MAGURA_WEAPON_USV_POC")
+          $zip = Join-Path $out "TPG_MAGURA_WEAPON_USV_POC_v0.0.2.zip"
+          Compress-Archive -Path (Join-Path $stage "TPG_MAGURA_WEAPON_USV_POC") -DestinationPath $zip -Force
+
+          if (-not (Test-Path $zip)) { throw "ZIP was not produced." }
+          Write-Host "Artifact: $zip"
+          Write-Host "Size: $((Get-Item $zip).Length) bytes"
+
+      - name: Upload test package
+        uses: actions/upload-artifact@v4
+        with:
+          name: TPG_MAGURA_WEAPON_USV_POC_v0.0.2
+          path: artifacts/TPG_MAGURA_WEAPON_USV_POC_v0.0.2.zip
+          if-no-files-found: error
+          retention-days: 30
