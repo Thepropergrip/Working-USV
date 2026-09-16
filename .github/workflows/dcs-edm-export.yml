@@ -7,6 +7,11 @@ on:
         description: "Path to EDM job JSON"
         required: false
         default: "edm-jobs/job.json"
+  pull_request:
+    paths:
+      - ".github/workflows/dcs-edm-export.yml"
+      - "tools/dcs-edm/**"
+      - "edm-jobs/**"
   push:
     paths:
       - ".github/workflows/dcs-edm-export.yml"
@@ -41,7 +46,6 @@ jobs:
           $exe = Get-ChildItem -Path $dir -Filter blender.exe -Recurse | Select-Object -First 1
           if (-not $exe) { throw "Blender executable not found after extraction." }
           "BLENDER_EXE=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "Blender: $($exe.FullName)"
 
       - name: Install official Eagle Dynamics EDM exporter
         shell: pwsh
@@ -56,11 +60,6 @@ jobs:
           New-Item -ItemType Directory -Force -Path $addons | Out-Null
           Copy-Item -Recurse -Force (Join-Path $src "io_scene_edm") (Join-Path $addons "io_scene_edm")
 
-          # The official v261289 addon ships the package directory as "Materials"
-          # while importing it as lower-case "materials". Normal interactive Windows
-          # installs tolerate this, but Blender's headless import path on the hosted
-          # runner does not. Keep ED's original tree untouched and add a case-normalized
-          # duplicate in the temporary installation.
           $materialsUpper = Join-Path $addons "io_scene_edm\Materials"
           $materialsTemp  = Join-Path $addons "io_scene_edm\__materials_casefix"
           $materialsLower = Join-Path $addons "io_scene_edm\materials"
@@ -77,30 +76,6 @@ jobs:
 
           "BLENDER_USER_SCRIPTS=$scripts" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "EDM_EXPORTER_COMMIT=$env:ED_EXPORTER_COMMIT" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "Official ED exporter pinned at $env:ED_EXPORTER_COMMIT"
-
-      - name: Select export job
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-
-          $requested = ""
-          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-            $requested = "${{ inputs.job_path }}"
-          }
-
-          if ($requested -and (Test-Path $requested)) {
-            $job = (Resolve-Path $requested).Path
-          }
-          elseif (Test-Path "edm-jobs/job.json") {
-            $job = (Resolve-Path "edm-jobs/job.json").Path
-          }
-          else {
-            $job = (Resolve-Path "tools/dcs-edm/selftest-job.json").Path
-          }
-
-          "EDM_JOB_PATH=$job" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "EDM job: $job"
 
       - name: Export EDM
         shell: pwsh
@@ -109,9 +84,36 @@ jobs:
           $out = Join-Path $env:GITHUB_WORKSPACE "edm-artifacts"
           New-Item -ItemType Directory -Force -Path $out | Out-Null
 
-          & $env:BLENDER_EXE --background --python "tools/dcs-edm/export_job.py" -- --job "$env:EDM_JOB_PATH" --artifact-dir "$out"
-          if ($LASTEXITCODE -ne 0) {
-            throw "Blender/EDM export failed with exit code $LASTEXITCODE"
+          if (("${{ github.ref_name }}" -eq "tpg-electrical-substation") -or ("${{ github.head_ref }}" -eq "tpg-electrical-substation")) {
+            $jobs = @(
+              "edm-jobs/tpg_substation_intact.json",
+              "edm-jobs/tpg_substation_lod1.json",
+              "edm-jobs/tpg_substation_lod2.json",
+              "edm-jobs/tpg_substation_destroyed.json"
+            )
+            foreach ($job in $jobs) {
+              & $env:BLENDER_EXE --background --python "tools/dcs-edm/export_job.py" -- --job "$job" --artifact-dir "$out"
+              if ($LASTEXITCODE -ne 0) { throw "TPG substation EDM export failed for $job with exit code $LASTEXITCODE" }
+            }
+            & "edm-jobs/package_tpg_substation.ps1"
+            if ($LASTEXITCODE -ne 0) { throw "TPG substation packaging failed with exit code $LASTEXITCODE" }
+          }
+          else {
+            $requested = ""
+            if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+              $requested = "${{ inputs.job_path }}"
+            }
+            if ($requested -and (Test-Path $requested)) {
+              $job = $requested
+            }
+            elseif (Test-Path "edm-jobs/job.json") {
+              $job = "edm-jobs/job.json"
+            }
+            else {
+              $job = "tools/dcs-edm/selftest-job.json"
+            }
+            & $env:BLENDER_EXE --background --python "tools/dcs-edm/export_job.py" -- --job "$job" --artifact-dir "$out"
+            if ($LASTEXITCODE -ne 0) { throw "Blender/EDM export failed with exit code $LASTEXITCODE" }
           }
 
           $edm = Get-ChildItem -Path $out -Filter *.edm -File

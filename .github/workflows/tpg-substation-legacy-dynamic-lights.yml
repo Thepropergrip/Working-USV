@@ -1,0 +1,80 @@
+name: TPG Substation Legacy Dynamic Lights
+
+on:
+  push:
+    branches:
+      - tpg-electrical-substation
+    paths:
+      - ".github/workflows/tpg-substation-legacy-dynamic-lights.yml"
+      - "edm-jobs/build_tpg_substation_legacy_dynamic_lights.py"
+      - "edm-jobs/package_tpg_substation_legacy_dynamic_lights.ps1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export-legacy-lights:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      BLENDER_URL: "https://download.blender.org/release/Blender2.93/blender-2.93.18-windows-x64.zip"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Blender 2.93.18
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $zip = Join-Path $env:RUNNER_TEMP "blender293.zip"
+          $dir = Join-Path $env:RUNNER_TEMP "blender293"
+          Invoke-WebRequest -Uri $env:BLENDER_URL -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $dir -Force
+          $exe = Get-ChildItem -Path $dir -Filter blender.exe -Recurse | Select-Object -First 1
+          if (-not $exe) { throw "Blender 2.93 executable not found." }
+          "BLENDER_EXE=$($exe.FullName)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Install legacy Blender EDM exporter
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $src = Join-Path $env:RUNNER_TEMP "legacy-edm-exporter"
+          git clone --depth 1 https://github.com/DCS-Creativity/BlenderEdmExporter.git $src
+          $scripts = Join-Path $env:GITHUB_WORKSPACE ".legacy-edm-scripts"
+          $addons = Join-Path $scripts "addons"
+          New-Item -ItemType Directory -Force -Path $addons | Out-Null
+          Copy-Item -Recurse -Force (Join-Path $src "io_BlenderEdmExporter") (Join-Path $addons "io_BlenderEdmExporter")
+          if (-not (Test-Path (Join-Path $addons "io_BlenderEdmExporter\edmexporter.py"))) { throw "Legacy exporter install failed." }
+          "BLENDER_USER_SCRIPTS=$scripts" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Export legacy LightNode v1 overlay
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $out = Join-Path $env:GITHUB_WORKSPACE "edm-artifacts"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          $edm = Join-Path $out "TPG_Electrical_Substation_V1_LEGACY_DYNAMIC_LIGHTS.edm"
+          & $env:BLENDER_EXE --background --python "edm-jobs/build_tpg_substation_legacy_dynamic_lights.py" -- --out "$edm"
+          if ($LASTEXITCODE -ne 0) { throw "Legacy EDM export failed." }
+          if (-not (Test-Path $edm)) { throw "Legacy light EDM missing." }
+          $item = Get-Item $edm
+          $hash = (Get-FileHash $edm -Algorithm SHA256).Hash
+          Write-Host "Legacy LightNode v1 EDM: $($item.Length) bytes SHA256=$hash"
+
+      - name: Package DCS overlay
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          & "edm-jobs/package_tpg_substation_legacy_dynamic_lights.ps1"
+          if (-not $?) { throw "Packaging failed." }
+
+      - name: Upload DCS-ready package
+        uses: actions/upload-artifact@v4
+        with:
+          name: TPG-Electrical-Substation-V1-LEGACY-DYNAMIC-LIGHTS-DCS-DropIn
+          path: |
+            edm-artifacts/TPG_Electrical_Substation_V1_LEGACY_DYNAMIC_LIGHTS_DCS_DropIn.zip
+            edm-artifacts/TPG_Electrical_Substation_V1_LEGACY_DYNAMIC_LIGHTS/**
+          if-no-files-found: error
+          retention-days: 30
