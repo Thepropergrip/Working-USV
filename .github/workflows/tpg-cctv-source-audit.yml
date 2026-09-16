@@ -1,0 +1,36 @@
+name: TPG CCTV Source Audit
+on:
+  push:
+    branches: [tpg-cctv-pole-build]
+    paths: [.github/workflows/tpg-cctv-source-audit.yml]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inventory exact staged bytes
+        run: |
+          python - <<'PY'
+          import hashlib,json,pathlib,zipfile
+          root=pathlib.Path('.')
+          out=pathlib.Path('cctv-audit');out.mkdir()
+          rows=[]
+          with zipfile.ZipFile(out/'repository-source.zip','w',zipfile.ZIP_DEFLATED) as z:
+              for p in sorted((root/'cctv-build').rglob('*')):
+                  if p.is_file():
+                      b=p.read_bytes();rows.append({'path':p.as_posix(),'bytes':len(b),'sha256':hashlib.sha256(b).hexdigest()});z.write(p,p.as_posix())
+              for d in ['tools/dcs-edm','.github/workflows']:
+                  for p in sorted((root/d).glob('*')):
+                      if p.is_file():z.write(p,p.as_posix())
+          (out/'inventory.json').write_text(json.dumps(rows,indent=2))
+          print(json.dumps(rows,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tpg-cctv-source-audit-${{ github.run_number }}
+          path: cctv-audit/*
+          if-no-files-found: error
+          retention-days: 7
