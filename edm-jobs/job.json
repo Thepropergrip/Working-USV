@@ -1,6 +1,6 @@
 {
   "mode": "script",
-  "script": "edm-jobs/akinci_source_probe.py",
-  "output": "akinci_source_probe.edm",
+  "script": "edm-jobs/akinci_import_inspect.py",
+  "output": "akinci_import_probe.edm",
   "save_blend": false
 }
