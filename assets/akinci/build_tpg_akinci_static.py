@@ -67,7 +67,7 @@ def load_payload():
     return raw
 
 def decode_payload(data):
-    if data[:4] != b"AKN4":
+    if data[:4] != b"AKN5":
         raise RuntimeError(f"Bad AKINCI payload magic: {data[:4]!r}")
     off = 4
     v_count, f_count = struct.unpack_from("<II", data, off)
