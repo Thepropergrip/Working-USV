@@ -1,48 +1,104 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import lzma
+import math
+import os
 import struct
 from array import array
 from pathlib import Path
 
 import bpy
 
-SOURCE_DIR = Path(__file__).resolve().parent / "source_obj"
+SOURCE_DIR = Path(__file__).resolve().parent / "ply_source"
+
+SOURCE_SHA256 = "06a7aa14d9c664ff85608053ea2029c4cd10c6682e527e87e7af3354c01841f6"
+EXPECTED_SOURCE_VERTICES = 51691
+EXPECTED_SOURCE_FACES = 711608
+EXPECTED_WEAPON_FACES_REMOVED = 25004
+EXPECTED_UNIQUE_FACES = 62768
+EXPECTED_USED_VERTICES = 45135
 
 TARGET_LENGTH = 12.3
 TARGET_HEIGHT = 4.1
 TARGET_SPAN = 20.0
 
-EXPECTED_PARTS = 25
-EXPECTED_PACKED_MAGIC = b"AKN7"
-EXPECTED_PACKED_VERTICES = 679119
-EXPECTED_PACKED_META_COUNT = 677969
-EXPECTED_FACES = 463129
-EXPECTED_USED_VERTICES = 461609
-EXPECTED_MATERIALS = 19
+REMOVE_FACE_RANGES = (
+    (225250, 233827),
+    (238446, 254673),
+    (281962, 281967),
+    (711413, 711604),
+)
 
-MATERIAL_COLORS = {
-    "Metal_Paint": (0.62, 0.64, 0.64, 1.0),
-    "asdkk": (0.18, 0.19, 0.19, 1.0),
-    "Metal_Paint.004": (0.68, 0.69, 0.69, 1.0),
-    "Metal_Paint.003": (0.42, 0.44, 0.44, 1.0),
-    "chrome": (0.65, 0.67, 0.68, 1.0),
-    "white": (0.92, 0.92, 0.90, 1.0),
-    "Air_Duct_Rubber.001": (0.025, 0.028, 0.030, 1.0),
-    "Steel.002": (0.34, 0.36, 0.37, 1.0),
-    "Metal_Paint.001": (0.58, 0.60, 0.60, 1.0),
-    "Материал.001": (0.30, 0.31, 0.31, 1.0),
-    "идгу.002": (0.22, 0.23, 0.23, 1.0),
-    "Smuged_Glass": (0.08, 0.11, 0.13, 0.48),
-    "Материал.002": (0.36, 0.37, 0.37, 1.0),
-    "Steel": (0.32, 0.34, 0.35, 1.0),
-    "Steel.001": (0.30, 0.32, 0.33, 1.0),
-    "Air_Duct_Rubber": (0.025, 0.028, 0.030, 1.0),
-    "идгу.001": (0.22, 0.23, 0.23, 1.0),
-    "Glass_dark": (0.025, 0.035, 0.045, 0.38),
-    "Материал.007": (0.15, 0.16, 0.16, 1.0),
-}
+MATERIAL_NAMES = [
+    "Metal_Paint",
+    "asdkk",
+    "Metal_Paint.004",
+    "Metal_Paint.003",
+    "chrome",
+    "white",
+    "Air_Duct_Rubber.001",
+    "Steel.002",
+    "Metal_Paint.001",
+    "Материал.001",
+    "идгу.002",
+    "Smuged_Glass",
+    "Материал.002",
+    "Steel",
+    "Steel.001",
+    "Air_Duct_Rubber",
+    "идгу.001",
+    "идгу",
+    "Glass_dark",
+    "Материал.007",
+]
+
+MATERIAL_COLORS = [
+    (0.62, 0.64, 0.64, 1.0),
+    (0.18, 0.19, 0.19, 1.0),
+    (0.68, 0.69, 0.69, 1.0),
+    (0.42, 0.44, 0.44, 1.0),
+    (0.48, 0.50, 0.51, 1.0),
+    (0.92, 0.92, 0.90, 1.0),
+    (0.025, 0.028, 0.030, 1.0),
+    (0.34, 0.36, 0.37, 1.0),
+    (0.58, 0.60, 0.60, 1.0),
+    (0.30, 0.31, 0.31, 1.0),
+    (0.22, 0.23, 0.23, 1.0),
+    (0.08, 0.11, 0.13, 1.0),
+    (0.36, 0.37, 0.37, 1.0),
+    (0.32, 0.34, 0.35, 1.0),
+    (0.30, 0.32, 0.33, 1.0),
+    (0.025, 0.028, 0.030, 1.0),
+    (0.22, 0.23, 0.23, 1.0),
+    (0.22, 0.23, 0.23, 1.0),
+    (0.025, 0.035, 0.045, 1.0),
+    (0.15, 0.16, 0.16, 1.0),
+]
+
+MATERIAL_BLOCKS = (
+    (0, 55587, 0),
+    (55588, 234417, 1),
+    (234418, 254673, 2),
+    (254674, 254825, 3),
+    (254826, 281967, 4),
+    (281968, 302703, 5),
+    (302704, 327279, 6),
+    (327280, 406511, 7),
+    (406512, 408431, 8),
+    (408432, 412237, 9),
+    (412238, 412749, 10),
+    (412750, 412751, 11),
+    (412752, 415855, 12),
+    (415856, 593007, 13),
+    (593008, 661103, 14),
+    (661104, 710255, 15),
+    (710256, 711412, 16),
+    (711413, 711604, 17),
+    (711605, 711606, 18),
+    (711607, 711607, 19),
+)
 
 
 def clear_scene():
@@ -52,147 +108,175 @@ def clear_scene():
     bpy.ops.object.delete(use_global=False)
 
 
-def reconstruct_payload():
-    parts = sorted(SOURCE_DIR.glob("part*.b64"))
-    if len(parts) != EXPECTED_PARTS:
-        raise RuntimeError(f"Expected {EXPECTED_PARTS} AKINCI payload chunks, found {len(parts)}")
+def load_ply_bytes():
+    parts = sorted(SOURCE_DIR.glob("ply_part*.b64"))
+    if len(parts) != 12:
+        raise RuntimeError(f"Expected 12 PLY payload chunks, found {len(parts)}")
+
     encoded = "".join(p.read_text(encoding="ascii").strip() for p in parts)
     packed = base64.b64decode(encoded, validate=True)
     raw = lzma.decompress(packed)
-    if raw[:4] != EXPECTED_PACKED_MAGIC:
-        raise RuntimeError(f"Expected AKN7 payload, got {raw[:8]!r}")
+    digest = hashlib.sha256(raw).hexdigest()
+    if digest != SOURCE_SHA256:
+        raise RuntimeError(f"PLY SHA-256 mismatch: {digest}")
+
     print(
-        f"[AKINCI] payload reconstructed: {len(parts)} chunks, "
-        f"{len(packed)} XZ bytes -> {len(raw)} AKN7 bytes"
+        f"[AKINCI] exact source PLY reconstructed: {len(parts)} chunks, "
+        f"{len(packed)} XZ bytes -> {len(raw)} bytes, sha256={digest}"
     )
     return raw
 
 
-def read_uvarint(data, offset):
-    value = 0
-    shift = 0
-    while True:
-        if offset >= len(data):
-            raise RuntimeError("Unexpected EOF while reading AKN7 varint")
-        byte = data[offset]
-        offset += 1
-        value |= (byte & 0x7F) << shift
-        if not (byte & 0x80):
-            return value, offset
-        shift += 7
-        if shift > 35:
-            raise RuntimeError("AKN7 varint is too large")
+def is_weapon_face(face_index):
+    for lo, hi in REMOVE_FACE_RANGES:
+        if lo <= face_index <= hi:
+            return True
+    return False
 
 
-def read_svarint(data, offset):
-    value, offset = read_uvarint(data, offset)
-    return ((value >> 1) ^ -(value & 1)), offset
+def parse_and_clean_ply(data):
+    marker = b"end_header\n"
+    header_end = data.find(marker)
+    if header_end < 0:
+        raise RuntimeError("PLY end_header not found")
+    data_offset = header_end + len(marker)
+    header = data[:data_offset].decode("ascii", errors="strict")
 
+    if "format binary_little_endian 1.0" not in header:
+        raise RuntimeError("Expected binary little-endian PLY")
+    if f"element vertex {EXPECTED_SOURCE_VERTICES}" not in header:
+        raise RuntimeError("Unexpected PLY vertex count")
+    if f"element face {EXPECTED_SOURCE_FACES}" not in header:
+        raise RuntimeError("Unexpected PLY face count")
 
-def decode_akn7(raw):
-    offset = 4
-    vertex_count, meta_count, material_count = struct.unpack_from("<III", raw, offset)
-    offset += 12
+    vertex_struct = struct.Struct("<8f")
+    raw_vertices = []
+    raw_normals = []
+    raw_uvs = []
 
-    if vertex_count != EXPECTED_PACKED_VERTICES:
-        raise RuntimeError(f"AKN7 vertex count {vertex_count} != {EXPECTED_PACKED_VERTICES}")
-    if meta_count != EXPECTED_PACKED_META_COUNT:
-        raise RuntimeError(f"AKN7 metadata count {meta_count} != {EXPECTED_PACKED_META_COUNT}")
-    if material_count != EXPECTED_MATERIALS:
-        raise RuntimeError(f"AKN7 material count {material_count} != {EXPECTED_MATERIALS}")
+    min_x = min_y = min_z = float("inf")
+    max_x = max_y = max_z = float("-inf")
 
-    material_names = []
-    for _ in range(material_count):
-        name_len = struct.unpack_from("<H", raw, offset)[0]
-        offset += 2
-        material_names.append(raw[offset:offset + name_len].decode("utf-8"))
-        offset += name_len
+    offset = data_offset
+    for _ in range(EXPECTED_SOURCE_VERTICES):
+        x, y, z, nx, ny, nz, u, v = vertex_struct.unpack_from(data, offset)
+        offset += vertex_struct.size
+        raw_vertices.append((x, y, z))
+        raw_normals.append((nx, ny, nz))
+        raw_uvs.append((u, v))
 
-    missing_colors = [name for name in material_names if name not in MATERIAL_COLORS]
-    if missing_colors:
-        raise RuntimeError(f"No material colors defined for: {missing_colors}")
+        min_x = min(min_x, x)
+        max_x = max(max_x, x)
+        min_y = min(min_y, y)
+        max_y = max(max_y, y)
+        min_z = min(min_z, z)
+        max_z = max(max_z, z)
 
-    quantized_offset = offset
-    quantized_end = quantized_offset + vertex_count * 6
-    if quantized_end > len(raw):
-        raise RuntimeError("AKN7 vertex block is truncated")
-    offset = quantized_end
+    sx = max_x - min_x
+    sy = max_y - min_y
+    sz = max_z - min_z
+    cx = (min_x + max_x) * 0.5
+    cz = (min_z + max_z) * 0.5
+
+    scale_x = -(TARGET_LENGTH / sx)
+    scale_y = TARGET_HEIGHT / sy
+    scale_z = TARGET_SPAN / sz
+
+    transformed_vertices = []
+    transformed_normals = []
+
+    for (x, y, z), (nx, ny, nz) in zip(raw_vertices, raw_normals):
+        transformed_vertices.append((
+            (x - cx) * scale_x,
+            (y - min_y) * scale_y,
+            (z - cz) * scale_z,
+        ))
+
+        # Inverse-transpose normal transform for the non-uniform axis scale.
+        tx = nx / scale_x
+        ty = ny / scale_y
+        tz = nz / scale_z
+        mag = math.sqrt(tx * tx + ty * ty + tz * tz)
+        if mag > 1e-12:
+            transformed_normals.append((tx / mag, ty / mag, tz / mag))
+        else:
+            transformed_normals.append((0.0, 1.0, 0.0))
 
     faces = []
     face_materials = []
     used_vertices = set()
+    seen = set()
 
-    while offset < len(raw):
-        if offset + 2 > len(raw):
-            raise RuntimeError("Truncated AKN7 face header")
-        polygon_size = raw[offset]
-        material_id = raw[offset + 1]
-        offset += 2
+    material_block_index = 0
+    removed_weapons = 0
+    duplicate_faces = 0
 
-        if polygon_size < 3 or polygon_size > 255:
-            raise RuntimeError(f"Invalid AKN7 polygon size {polygon_size}")
-        if material_id >= material_count:
-            raise RuntimeError(f"Invalid AKN7 material id {material_id}")
+    for face_index in range(EXPECTED_SOURCE_FACES):
+        while (
+            material_block_index + 1 < len(MATERIAL_BLOCKS)
+            and face_index > MATERIAL_BLOCKS[material_block_index][1]
+        ):
+            material_block_index += 1
 
-        first_index, offset = read_uvarint(raw, offset)
-        indices = [first_index]
-        previous = first_index
-        for _ in range(1, polygon_size):
-            delta, offset = read_svarint(raw, offset)
-            previous += delta
-            indices.append(previous)
+        block_lo, block_hi, material_id = MATERIAL_BLOCKS[material_block_index]
+        if not (block_lo <= face_index <= block_hi):
+            raise RuntimeError(f"No material block for face {face_index}")
 
-        if min(indices) < 0 or max(indices) >= vertex_count:
-            raise RuntimeError(
-                f"AKN7 polygon index outside 0..{vertex_count - 1}: "
-                f"{min(indices)}..{max(indices)}"
-            )
+        polygon_size = data[offset]
+        offset += 1
+        if polygon_size < 3:
+            raise RuntimeError(f"Invalid PLY polygon size {polygon_size} at face {face_index}")
 
-        face = tuple(indices)
-        faces.append(face)
+        indices = struct.unpack_from("<" + ("I" * polygon_size), data, offset)
+        offset += polygon_size * 4
+
+        if is_weapon_face(face_index):
+            removed_weapons += 1
+            continue
+
+        # Drop only byte-for-byte duplicate polygons carrying the same material.
+        # Winding changes, material changes and distinct topology are retained.
+        key = (material_id, indices)
+        if key in seen:
+            duplicate_faces += 1
+            continue
+        seen.add(key)
+
+        faces.append(indices)
         face_materials.append(material_id)
-        used_vertices.update(face)
+        used_vertices.update(indices)
 
-    if len(faces) != EXPECTED_FACES:
-        raise RuntimeError(f"AKN7 face count {len(faces)} != {EXPECTED_FACES}")
+    if offset != len(data):
+        raise RuntimeError(f"PLY parser ended at {offset}; file length is {len(data)}")
+    if removed_weapons != EXPECTED_WEAPON_FACES_REMOVED:
+        raise RuntimeError(
+            f"Weapon-face removal mismatch: {removed_weapons} vs "
+            f"{EXPECTED_WEAPON_FACES_REMOVED}"
+        )
+    if len(faces) != EXPECTED_UNIQUE_FACES:
+        raise RuntimeError(
+            f"Unique-face count mismatch: {len(faces)} vs {EXPECTED_UNIQUE_FACES}"
+        )
     if len(used_vertices) != EXPECTED_USED_VERTICES:
         raise RuntimeError(
-            f"AKN7 used-vertex count {len(used_vertices)} != {EXPECTED_USED_VERTICES}"
+            f"Used-vertex count mismatch: {len(used_vertices)} vs {EXPECTED_USED_VERTICES}"
         )
 
-    # Compact away the 217,510 unreferenced staging vertices while preserving the
-    # exact quantized geometry represented by every retained polygon.
     used_sorted = sorted(used_vertices)
     remap = {old: new for new, old in enumerate(used_sorted)}
+
+    vertices = [transformed_vertices[i] for i in used_sorted]
+    normals = [transformed_normals[i] for i in used_sorted]
+    uvs = [raw_uvs[i] for i in used_sorted]
     compact_faces = [tuple(remap[i] for i in face) for face in faces]
 
-    vertices = []
-    qmins = [65535, 65535, 65535]
-    qmaxs = [0, 0, 0]
-    for old_index in used_sorted:
-        qx, qy, qz = struct.unpack_from("<HHH", raw, quantized_offset + old_index * 6)
-        qmins[0] = min(qmins[0], qx)
-        qmins[1] = min(qmins[1], qy)
-        qmins[2] = min(qmins[2], qz)
-        qmaxs[0] = max(qmaxs[0], qx)
-        qmaxs[1] = max(qmaxs[1], qy)
-        qmaxs[2] = max(qmaxs[2], qz)
-
-        x = (qx / 65535.0) * TARGET_LENGTH - TARGET_LENGTH * 0.5
-        y = (qy / 65535.0) * TARGET_HEIGHT
-        z = (qz / 65535.0) * TARGET_SPAN - TARGET_SPAN * 0.5
-        vertices.append((x, y, z))
-
-    if qmins != [0, 0, 0] or qmaxs != [65535, 65535, 65535]:
-        raise RuntimeError(f"AKN7 compacted envelope lost extrema: min={qmins}, max={qmaxs}")
-
     print(
-        f"[AKINCI] AKN7 decoded: packed_vertices={vertex_count}, "
-        f"used_vertices={len(vertices)}, faces={len(compact_faces)}, "
-        f"materials={material_count}, meta_count={meta_count}"
+        f"[AKINCI] source={EXPECTED_SOURCE_FACES} faces; "
+        f"weapons_removed={removed_weapons}; exact_duplicates_removed={duplicate_faces}; "
+        f"final={len(compact_faces)} faces / {len(vertices)} vertices"
     )
-    print(f"[AKINCI] material table: {material_names}")
-    return vertices, compact_faces, face_materials, material_names
+
+    return vertices, normals, uvs, compact_faces, face_materials
 
 
 def create_edm_material(name, rgba):
@@ -200,12 +284,14 @@ def create_edm_material(name, rgba):
     from materials.material_default import DefaultMaterial
 
     descriptions = build_material_descriptions()
-    material = bpy.data.materials.new(name=name)
-    material.use_nodes = True
-    material.diffuse_color = rgba
-    material.node_tree.nodes.clear()
+    mat = bpy.data.materials.new(name=name)
+    mat.use_nodes = True
+    mat.diffuse_color = rgba
+    mat.roughness = 0.62
+    mat.metallic = 0.0
+    mat.node_tree.nodes.clear()
 
-    node = material.node_tree.nodes.new(type=DefaultMaterial.node_group_name)
+    node = mat.node_tree.nodes.new(type=DefaultMaterial.node_group_name)
     node.post_init(descriptions[DefaultMaterial.name])
 
     base = node.inputs.get("Base Color")
@@ -214,25 +300,23 @@ def create_edm_material(name, rgba):
 
     alpha = node.inputs.get("Base Alpha*")
     if alpha is not None:
-        alpha.default_value = rgba[3]
+        alpha.default_value = 1.0
 
     opacity = node.inputs.get("Opacity Value")
     if opacity is not None:
-        opacity.default_value = rgba[3]
+        opacity.default_value = 1.0
 
-    roughness = node.inputs.get("RoughMet R")
-    if roughness is not None:
-        if "chrome" in name.lower():
-            roughness.default_value = 0.18
-        elif "rubber" in name.lower():
-            roughness.default_value = 0.82
-        else:
-            roughness.default_value = 0.48
+    transparency = node.inputs.get("Transparency")
+    if transparency is not None:
+        try:
+            transparency.default_value = "OPAQUE"
+        except Exception:
+            pass
 
-    return material
+    return mat
 
 
-def build_render_mesh(vertices, faces, face_materials, material_names):
+def build_render_mesh(vertices, normals, uvs, faces, face_materials):
     mesh = bpy.data.meshes.new("Bayraktar_AKINCI_Static_Mesh")
     mesh.from_pydata(vertices, [], faces)
     mesh.update(calc_edges=True)
@@ -240,18 +324,33 @@ def build_render_mesh(vertices, faces, face_materials, material_names):
     obj = bpy.data.objects.new("Bayraktar_AKINCI_Static", mesh)
     bpy.context.scene.collection.objects.link(obj)
 
-    for name in material_names:
-        obj.data.materials.append(create_edm_material(name, MATERIAL_COLORS[name]))
+    for name, rgba in zip(MATERIAL_NAMES, MATERIAL_COLORS):
+        obj.data.materials.append(create_edm_material(name, rgba))
 
     mesh.polygons.foreach_set("material_index", array("i", face_materials))
     mesh.polygons.foreach_set("use_smooth", array("b", [1]) * len(mesh.polygons))
 
-    obj["TPG_SOURCE"] = "AKN7 compact cleaned AKINCI geometry"
+    uv_layer = mesh.uv_layers.new(name="UVMap")
+    uv_flat = array("f")
+    for loop in mesh.loops:
+        u, v = uvs[loop.vertex_index]
+        uv_flat.extend((u, v))
+    uv_layer.data.foreach_set("uv", uv_flat)
+
+    # Preserve the PLY's source shading normals when Blender exposes the API.
+    try:
+        mesh.normals_split_custom_set_from_vertices(normals)
+        print("[AKINCI] source custom normals applied")
+    except Exception as exc:
+        print(f"[AKINCI] custom-normal API unavailable; smooth geometry normals used: {exc}")
+
+    obj["TPG_SOURCE"] = "Exact uploaded binary PLY"
+    obj["TPG_SOURCE_SHA256"] = SOURCE_SHA256
     obj["TPG_MODELED_WEAPONS_REMOVED"] = True
     obj["TPG_EMPTY_PYLONS_RETAINED"] = True
-    obj["TPG_TARGET_LENGTH_M"] = TARGET_LENGTH
-    obj["TPG_TARGET_HEIGHT_M"] = TARGET_HEIGHT
-    obj["TPG_TARGET_SPAN_M"] = TARGET_SPAN
+    obj["TPG_EXACT_DUPLICATE_FACES_REMOVED"] = (
+        EXPECTED_SOURCE_FACES - EXPECTED_WEAPON_FACES_REMOVED - EXPECTED_UNIQUE_FACES
+    )
     return obj
 
 
@@ -274,35 +373,35 @@ def validate(obj):
     xs = [v.co.x for v in obj.data.vertices]
     ys = [v.co.y for v in obj.data.vertices]
     zs = [v.co.z for v in obj.data.vertices]
-    dimensions = (
+    dims = (
         max(xs) - min(xs),
         max(ys) - min(ys),
         max(zs) - min(zs),
     )
     expected = (TARGET_LENGTH, TARGET_HEIGHT, TARGET_SPAN)
 
-    if any(abs(got - want) > 0.002 for got, want in zip(dimensions, expected)):
-        raise RuntimeError(f"Envelope mismatch: {dimensions} vs {expected}")
+    if any(abs(got - want) > 0.002 for got, want in zip(dims, expected)):
+        raise RuntimeError(f"Envelope mismatch: {dims} vs {expected}")
     if len(obj.data.vertices) != EXPECTED_USED_VERTICES:
         raise RuntimeError(
             f"Final vertex count {len(obj.data.vertices)} != {EXPECTED_USED_VERTICES}"
         )
-    if len(obj.data.polygons) != EXPECTED_FACES:
+    if len(obj.data.polygons) != EXPECTED_UNIQUE_FACES:
         raise RuntimeError(
-            f"Final face count {len(obj.data.polygons)} != {EXPECTED_FACES}"
+            f"Final face count {len(obj.data.polygons)} != {EXPECTED_UNIQUE_FACES}"
         )
 
     print(
-        f"[AKINCI] VALIDATION PASS dims={dimensions} "
+        f"[AKINCI] VALIDATION PASS dims={dims} "
         f"verts={len(obj.data.vertices)} faces={len(obj.data.polygons)}"
     )
-    print("[AKINCI] modeled stores removed; empty pylons retained")
+    print("[AKINCI] exact source topology retained except modeled weapons and exact duplicates")
 
 
 def main():
     clear_scene()
-    vertices, faces, face_materials, material_names = decode_akn7(reconstruct_payload())
-    aircraft = build_render_mesh(vertices, faces, face_materials, material_names)
+    vertices, normals, uvs, faces, face_materials = parse_and_clean_ply(load_ply_bytes())
+    aircraft = build_render_mesh(vertices, normals, uvs, faces, face_materials)
     add_collision_shells()
     validate(aircraft)
     bpy.context.view_layer.objects.active = aircraft
