@@ -30,7 +30,10 @@ try:
     logs.append({"gltfs":[str(x) for x in gltfs]})
     if not gltfs: raise RuntimeError("No glTF produced")
     gltf=gltfs[0]
-    bpy.ops.wm.read_factory_settings(use_empty=True)
+    if bpy.context.object and bpy.context.object.mode != "OBJECT":
+        bpy.ops.object.mode_set(mode="OBJECT")
+    bpy.ops.object.select_all(action="SELECT")
+    bpy.ops.object.delete(use_global=False)
     bpy.ops.import_scene.gltf(filepath=str(gltf))
     bpy.context.view_layer.update()
     records=[]
@@ -55,7 +58,10 @@ except Exception as e:
     logs.append({"success":False,"exception":repr(e),"traceback":traceback.format_exc()})
 finally:
     (ART/"akinci_import_probe_log.json").write_text(json.dumps(logs,indent=2),encoding="utf-8")
-    bpy.ops.wm.read_factory_settings(use_empty=True)
+    if bpy.context.object and bpy.context.object.mode != "OBJECT":
+        bpy.ops.object.mode_set(mode="OBJECT")
+    bpy.ops.object.select_all(action="SELECT")
+    bpy.ops.object.delete(use_global=False)
     bpy.ops.mesh.primitive_cube_add(size=1)
     bpy.context.object.name="AKINCI_IMPORT_PROBE"
     print("AKINCI_IMPORT_PROBE_FINISHED")
