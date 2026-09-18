@@ -1,6 +1,6 @@
 {
   "mode": "script",
-  "script": "edm-jobs/build_grizzly_alarm_lift.py",
-  "output": "TPG_GRIZZLY_SHORAD_D_JAGM_KIN_4P5S_CRATE35_CA.edm",
+  "script": "assets/akinci/build_tpg_akinci_static.py",
+  "output": "TPG_AKINCI_STATIC.edm",
   "save_blend": true
 }
