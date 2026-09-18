@@ -78,8 +78,8 @@ def reconstruct_obj_bytes():
     parts = sorted(SOURCE_DIR.glob("part*.b64"))
     if not parts:
         raise FileNotFoundError(f"No staged AKINCI OBJ chunks in {SOURCE_DIR}")
-    if len(parts) != 21:
-        raise RuntimeError(f"Expected 21 AKINCI OBJ chunks, found {len(parts)}")
+    if len(parts) != 25:
+        raise RuntimeError(f"Expected 25 AKINCI OBJ chunks, found {len(parts)}")
     encoded = "".join(p.read_text(encoding="ascii").strip() for p in parts)
     packed = base64.b64decode(encoded, validate=True)
     raw = lzma.decompress(packed)
