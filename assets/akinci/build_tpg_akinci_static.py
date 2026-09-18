@@ -7,8 +7,7 @@ from array import array
 from pathlib import Path
 import bpy
 
-ROOT = Path(__file__).resolve().parent.parent
-SOURCE_DIR = ROOT / "assets" / "akinci" / "source"
+SOURCE_DIR = Path(__file__).resolve().parent / "source"
 
 EXPECTED_VERTICES = 45135
 EXPECTED_FACES = 62024
