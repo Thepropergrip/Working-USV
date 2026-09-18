@@ -3,5 +3,5 @@
   "script": "assets/akinci/build_tpg_akinci_static.py",
   "output": "TPG_AKINCI_STATIC.edm",
   "save_blend": true,
-  "build_revision": "akinci-obj-direct-v1"
+  "build_revision": "akinci-obj-direct-v2-complete-source"
 }
